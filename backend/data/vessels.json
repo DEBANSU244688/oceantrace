@@ -1,0 +1,132 @@
+[
+  {
+    "vessel_id": "V001",
+    "name": "BAY VOYAGER",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V002",
+    "name": "COASTAL VENTURE",
+    "type": "cargo"
+  },
+  {
+    "vessel_id": "V003",
+    "name": "ORIENT MARINER",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V004",
+    "name": "TIDEWATER EXPRESS",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V005",
+    "name": "SEA TRADER",
+    "type": "cargo"
+  },
+  {
+    "vessel_id": "V006",
+    "name": "BLUE MERIDIAN",
+    "type": "fishing"
+  },
+  {
+    "vessel_id": "V007",
+    "name": "MV TRUE NORTH",
+    "type": "container"
+  },
+  {
+    "vessel_id": "V008",
+    "name": "MV KALINGA PRIDE",
+    "type": "cargo"
+  },
+  {
+    "vessel_id": "V009",
+    "name": "MV SILVER TIDE",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V010",
+    "name": "MV FAR HORIZON",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V011",
+    "name": "PARADIP DAWN",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V012",
+    "name": "MV OCEAN STAR",
+    "type": "fishing"
+  },
+  {
+    "vessel_id": "V013",
+    "name": "HARBOUR QUEEN",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V014",
+    "name": "MV SWIFT CURRENT",
+    "type": "cargo"
+  },
+  {
+    "vessel_id": "V015",
+    "name": "MV NORTHERN LIGHT",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V016",
+    "name": "MV DEEP HORIZON II",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V017",
+    "name": "SANDPIPER",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V018",
+    "name": "MV STORM PETREL",
+    "type": "cargo"
+  },
+  {
+    "vessel_id": "V019",
+    "name": "MV LONG REACH",
+    "type": "fishing"
+  },
+  {
+    "vessel_id": "V020",
+    "name": "COROMANDEL STAR",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V021",
+    "name": "ODISHA PIONEER",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V022",
+    "name": "MV SAGAR RATNA",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V023",
+    "name": "GULF CARRIER",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V024",
+    "name": "CAPE RUNNER",
+    "type": "tanker"
+  },
+  {
+    "vessel_id": "V025",
+    "name": "MV NAVIGATOR",
+    "type": "bulk carrier"
+  },
+  {
+    "vessel_id": "V026",
+    "name": "MV EASTERN WAVE",
+    "type": "cargo"
+  }
+]

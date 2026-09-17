@@ -1,0 +1,250 @@
+/* Design direction: a maritime intelligence "situation room", not a generic
+   SaaS dashboard. Dark chart-room background, one signal-teal accent for
+   live data, amber/red reserved specifically for risk level (never used
+   decoratively). Panel identity comes from a left border-accent strip keyed
+   to the panel's role, not from uniform rounded-corner-card sameness. */
+
+:root {
+  --bg: #0a0f1a;
+  --panel: #111a2b;
+  --panel-alt: #16223a;
+  --border: #202e4a;
+  --accent: #35d0b0;
+  --accent-dim: #1d7a68;
+  --risk-high: #e8544e;
+  --risk-med: #f2a93b;
+  --risk-low: #56698a;
+  --text: #e7ecf2;
+  --text-muted: #8b98ac;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.app-title span { color: var(--accent); }
+
+.app-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.status-pill {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.status-pill.ok { color: var(--accent); border-color: var(--accent-dim); }
+.status-pill.error { color: var(--risk-high); border-color: var(--risk-high); }
+
+.step-bar {
+  display: flex;
+  gap: 10px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.step-btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.step-btn:hover:not(:disabled) { border-color: var(--accent-dim); }
+.step-btn:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
+.step-btn.done { border-color: var(--accent-dim); color: var(--accent); }
+.step-btn .step-num {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.map-pane {
+  flex: 1;
+  position: relative;
+}
+.map-pane .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+}
+
+.sidebar {
+  width: 380px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 3px;
+  padding: 14px 16px;
+  animation: panel-in 220ms ease-out;
+}
+.panel.accent-teal { border-left-color: var(--accent); }
+.panel.accent-amber { border-left-color: var(--risk-med); }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 10px 0;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.stat-label { color: var(--text-muted); }
+.stat-value { font-family: var(--font-mono); color: var(--text); }
+
+.funnel-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+.funnel-flow .arrow { color: var(--text-muted); font-size: 14px; }
+.funnel-flow .stage-label {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.vessel-list { display: flex; flex-direction: column; gap: 6px; }
+
+.vessel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 3px;
+  border-left: 3px solid var(--risk-low);
+  background: var(--panel-alt);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.vessel-row:hover { background: #1c2c4a; }
+.vessel-row.selected { outline: 1px solid var(--accent-dim); }
+.vessel-row.risk-high { border-left-color: var(--risk-high); }
+.vessel-row.risk-med { border-left-color: var(--risk-med); }
+
+.vessel-rank {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 12px;
+  width: 16px;
+}
+.vessel-name { flex: 1; font-size: 13px; }
+.vessel-score {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+}
+.vessel-score.risk-high { color: var(--risk-high); }
+.vessel-score.risk-med { color: var(--risk-med); }
+.vessel-score.risk-low { color: var(--risk-low); }
+
+.reasons-list {
+  margin: 8px 0 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.reasons-list li { margin-bottom: 4px; }
+
+.error-banner {
+  background: #2a1518;
+  border: 1px solid var(--risk-high);
+  color: #ffb4b0;
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
