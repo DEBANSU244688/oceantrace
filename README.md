@@ -27,11 +27,22 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
+cp .env.example .env.local   # then add your CARTO Basemaps API key
 npm run dev
 ```
 Open the URL Vite prints (default http://localhost:5173). Click **Detect
 Spill -> Trace Origin -> Analyse AIS**, then click a vessel in the ranked
 list to see its trajectory and why it was flagged.
+
+The map uses CARTO raster basemaps. Put your key in `frontend/.env.local`:
+
+```bash
+VITE_CARTO_BASEMAPS_API_KEY=your_carto_basemaps_key
+```
+
+Vite reads `.env.local` only when the dev server starts, so restart
+`npm run dev` after changing the key. Keep CARTO/OpenStreetMap attribution
+visible per CARTO's basemap terms.
 
 `backend/data/vessels.json`, `backend/data/ais_positions.csv`, and
 `backend/data/sample_images/` are already generated and included so the app
