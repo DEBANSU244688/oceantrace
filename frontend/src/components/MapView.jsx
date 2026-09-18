@@ -3,7 +3,14 @@ import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 
 // Dark basemap so the data (not the map chrome) carries the color.
-const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const CARTO_BASEMAPS_API_KEY = import.meta.env.VITE_CARTO_BASEMAPS_API_KEY;
+if (!CARTO_BASEMAPS_API_KEY) {
+  console.warn("Missing VITE_CARTO_BASEMAPS_API_KEY. CARTO tiles will show an API key watermark.");
+}
+const TILE_QUERY = CARTO_BASEMAPS_API_KEY
+  ? `?${new URLSearchParams({ key: CARTO_BASEMAPS_API_KEY }).toString()}`
+  : "";
+const TILE_URL = `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png${TILE_QUERY}`;
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
