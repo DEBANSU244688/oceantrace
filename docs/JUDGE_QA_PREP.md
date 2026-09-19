@@ -31,15 +31,16 @@ keep it that way. (See Theme 1.)
 
 **Readiness: READY.** The API contract in `SACD.md` §3 *is* the documented handoff,
 it was frozen before anyone wrote code, and FastAPI auto-publishes it at `/docs`.
-Open that tab if challenged.
+Open that tab if challenged. Nine endpoints now; the contract grew but never broke —
+every addition was made in `SACD.md` first.
 
 **Say this — the workflow, out loud:**
 
 > "It's a four-stage pipeline, and each stage is a REST call the frontend makes in
 > order. Detection takes an image ID and returns a slick polygon with area,
 > perimeter, centroid and confidence. That centroid feeds the drift engine, which
-> advects 150 particles backward through a current-and-wind field to get an origin
-> probability cloud and a spill time window. That origin and window feed the
+> advects 150 particles backward through real hourly ocean current and wind for that
+> location and date, to get an origin probability cloud and a spill time window. That origin and window feed the
 > attribution stage, which filters the AIS roster spatially, then temporally, then
 > by trajectory, and scores what survives on eight weighted factors. Each stage's
 > output is a typed schema that's the next stage's input — so the handoff is a
@@ -138,21 +139,26 @@ you chose, not something you overlooked.
 **Then land the killer follow-up — this is ours, from our own model:**
 
 > "And we can actually price the delay. Our hindcast is what compensates for the lag
-> between the spill and the image, and its uncertainty grows with that lag. Same
-> slick, same drift model, only the image age changes:"
+> between the spill and the image, and its uncertainty grows with that lag. This is run on
+> real ocean current and wind for that location — same slick, same real forcing, only the
+> image age changes:"
 
 | Image age when we get it | Origin zone radius | Search area |
 |---|---|---|
-| 3 hours | 1.0 km | **3 km²** |
-| 6 hours | 1.7 km | 9 km² |
-| 24 hours | 3.1 km | 29 km² |
-| 48 hours | 4.1 km | **53 km²** |
+| 3 hours | 1.05 km | **3 km²** |
+| 6 hours | 1.56 km | 8 km² |
+| 24 hours | 3.07 km | 30 km² |
+| 48 hours | 4.22 km | **56 km²** |
 
 > "A three-hour image gives you a three-square-kilometre search box. A two-day-old
-> archival image gives you fifty-three — eighteen times the area, and by then the
+> archival image gives you fifty-six — sixteen times the area, and by then the
 > vessel has left. That's the argument for tasking, and it's the argument for
 > automating the analysis: there's no point cutting hours off image delivery if the
 > analysis then sits in a queue for a day."
+
+Reproduce it yourself before quoting: `drift_engine.hindcast(..., hours=N)` for the event
+you are showing. The numbers move a little between events because each one has its own
+real forcing.
 
 **If pushed**
 - **"Why SAR and not optical?"** SAR sees through cloud and at night — for a spill

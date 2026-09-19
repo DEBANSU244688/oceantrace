@@ -33,8 +33,9 @@ browser Network tab if asked — nothing in the flow is mocked frontend data.
    resolves into 150 advected particles and an uncertainty circle. Say out loud:
    *"the origin is a probability cloud, not a point."* The estimated slick age
    appears alongside the spill window.
-4. **Analyse AIS** — the funnel narrows 26 → 2 → 2 → 2 and the ranked list
-   appears.
+4. **Analyse AIS** — the funnel narrows from 26. How far depends on the event: the
+   Paradip approach tile goes 26 → 1 → 1 → 1, the southern lane 26 → 3 → 3 → 3. Real
+   traffic filtered against that event's real origin and window.
 5. **Click the top vessel** — its track is drawn, and the why-flagged panel
    lists the reasons in plain language.
 6. **Now switch to a different tile and run it again.** Different origin,
@@ -95,7 +96,10 @@ a local equirectangular projection. Handles any tile size.
 ### 3. Drift — `drift_engine.py`
 
 Physics-based **particle advection**, pure NumPy. 150 particles stepped every
-30 min under a combined current+wind vector plus per-particle random diffusion.
+30 min under **real hourly ocean current + 3% windage** (Open-Meteo, per event, per
+date — cached so the demo runs offline), plus per-particle random diffusion. The four
+events drift at 0.64–2.19 km/h on bearings from 204° to 324°; the paths visibly curve on
+the map because the forcing varies hour to hour.
 
 - **Backward** → origin probability cloud. Cloud centroid = probable origin,
   90th-percentile spread = uncertainty radius. Both the cloud and the backward
@@ -108,7 +112,7 @@ Physics-based **particle advection**, pure NumPy. 150 particles stepped every
   drift, a round blob carries almost no temporal information and we say so
   rather than quoting a firm number. **This is independent of the assumed
   satellite-pass lag**, which is the point: on the synthetic tile it returns
-  3.1 h against an assumed 4.0 h, two separate routes to roughly the same
+  3.7 h against an assumed 4.0 h, two separate routes to roughly the same
   answer.
 
 ### 4. AIS funnel + attribution — `attribution.py`
@@ -135,8 +139,8 @@ explainable?"
 
 ### 5. API — `main.py` (FastAPI)
 
-Eight endpoints, contract frozen in `SACD.md` §3, auto-documented at `/docs`:
-`/health`, `/api/scenario`, `/api/images/{id}`, `/api/detect`,
+Nine endpoints, contract frozen in `SACD.md` §3, auto-documented at `/docs`:
+`/health`, `/api/scenario`, `/api/images/{id}`, `/api/basemap/land`, `/api/detect`,
 `/api/detect/upload`, `/api/drift`, `/api/attribution`, `/api/vessels/{id}`.
 In-memory state — no database server, per `DB.md`.
 
@@ -201,7 +205,7 @@ WCAG AA on every token.
 | Claim | Number |
 |---|---|
 | Detector accuracy vs the dataset's own ground-truth masks | **mean IoU 0.43, median 0.41, 27/70 tiles above 0.5** |
-| Origin recovery vs scenario ground truth | within **~50 m** (tested: 0.03–0.11 km) |
+| Origin recovery vs scenario ground truth | **22–91 m**, inverting real ocean forcing |
 | Spill window recovery | **exact** |
 | Guilty vessel score vs next-highest | **0.94 vs 0.50** |
 | Full flow, detect → vessel detail | **~0.5 s** (`PRD.md` allows 60 s) |
@@ -345,7 +349,7 @@ always produces an answer.
 **"Your slick age says 1 hour but the window is 4 hours — which is it?"**
 Two different measurements, deliberately. The window comes from the assumed
 satellite-pass lag; the age comes from the slick's own geometry. On the
-synthetic tile they agree closely (3.1 h vs 4.0 h). On a small real crop the
+synthetic tile they agree closely (3.7 h vs 4.0 h). On a small real crop the
 geometry estimate is low *and reports low confidence*, which is the system
 being honest rather than confident and wrong.
 

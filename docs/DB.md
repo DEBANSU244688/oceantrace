@@ -19,13 +19,23 @@ a `CREATE TABLE` or a `pd.DataFrame`/dict keyed by ID.
 |---|---|---|
 | spill_id | PK, text | e.g. `SP-001` |
 | image_source | text | filename / dataset reference |
+| scenario_id | text | which spill event this image observes (`sc_01`…`sc_04`) |
+| source | text | `sample` or `upload` |
 | polygon_geojson | text/json | detected slick boundary |
 | area_km2 | float | |
 | perimeter_km | float | |
 | centroid_lat, centroid_lon | float | |
-| confidence | float 0–1 | detection confidence |
-| est_age_min_hr, est_age_max_hr | float | optional (SHOULD item) |
-| age_confidence | float 0–1 | optional |
+| confidence | float 0–1 | detection confidence, *after* the look-alike penalty |
+| candidate_regions | int | dark regions that survived thresholding (S4) |
+| rejected_lookalikes | int | …of which this many lost to the winner (S4) |
+| lookalike_risk | float 0–1 | ambiguity + faintness; also lowers `confidence` (S4) |
+| lookalike_note | text | the plain sentence shown in the panel |
+| attributable | bool | did it clear the gate? false ⇒ drift/attribution return 409 |
+| attribution_block_reason | text | shown to the user when `attributable` is false |
+| image_bbox | json | the tile's geographic footprint, for the map overlay |
+
+The age estimate lives on the drift result rather than here — it is derived from the
+polygon at drift time, not stored at detection.
 
 ## 2. `origin_zones`
 | field | type | notes |
@@ -36,8 +46,11 @@ a `CREATE TABLE` or a `pd.DataFrame`/dict keyed by ID.
 | radius_km | float | uncertainty radius shown on the map |
 | origin_confidence | float 0–1 | |
 | spill_window_start, spill_window_end | timestamp | estimated emergence window |
-| particle_cloud_geojson | text/json | for the probability-heatmap visual |
-| forecast_path_geojson | text/json | optional (S1) |
+| particle_cloud_geojson | text/json | 150 advected particles, drawn on the map |
+| forecast_path_geojson | text/json | S1 — forward run |
+| hindcast_path_geojson | text/json | backward run's centroid track, for the animation |
+| estimated_age_hours | float | S2 — from the slick's extent along the drift axis |
+| age_confidence | float 0–1 | S2 — from the slick's elongation |
 
 ## 3. `vessels` (synthetic AIS roster — static per demo scenario)
 | field | type | notes |
@@ -69,6 +82,22 @@ a `CREATE TABLE` or a `pd.DataFrame`/dict keyed by ID.
 | total_risk_score | float 0–1 | weighted sum, see formula in `MASTER_REFERENCE_INDEX.md` |
 | rank | int | |
 | reasons | text[] | short bullet strings for the "why flagged" panel |
+
+## 5b. Reference data on disk (not a table, but it is state)
+
+| file | what | built by |
+|---|---|---|
+| `data/sample_images/` | the SAR tiles + their bounding boxes | `fetch_sar_tiles.py` |
+| `data/demo_uploads/` | tiles for the upload button, incl. two with no oil | `fetch_demo_uploads.py` |
+| `data/ocean_forcing.json` | real hourly current + wind per event | `fetch_ocean_forcing.py` |
+| `data/coastline.geojson` | public-domain land polygons, the offline basemap | `fetch_coastline.py` |
+| `data/vessels.json`, `ais_positions.csv` | the synthetic AIS roster and tracks | `generate_ais.py` |
+
+All are committed, so a fresh clone runs without executing a single script. The scripts
+only need re-running when `app/config.py` changes.
+
+Uploaded images are held in a module-level dict keyed by `upload_NNN` and deliberately do
+not outlive the process.
 
 ## 6. What's deliberately NOT here
 No user table, no session table, no auth, no multi-spill history beyond what's needed to

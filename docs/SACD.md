@@ -42,10 +42,23 @@ Sample SAR image (Zenodo)
 | 1 | `detector.py` | Segment oil-like regions from a SAR image | image file | binary mask |
 | 2 | `characterize.py` | Turn mask into geometry + stats | mask | polygon, area, perimeter, centroid, confidence |
 | 3 | `drift_engine.py` | Backward/forward particle advection | centroid, current/wind field, N hours | origin zone (particle cloud), forecast path |
-| 4 | `ais_gen.py` | Generate synthetic vessel roster + tracks | scenario config (see DRD.md) | vessel table + position time series |
+| 4 | `scripts/generate_ais.py` | Generate synthetic vessel roster + tracks across all four events | scenario config (see DRD.md) | vessel table + position time series |
 | 5 | `attribution.py` | Filter candidates, compute risk scores | origin zone, spill window, AIS tracks | ranked vessel list with score breakdown |
 | 6 | `api/main.py` (FastAPI) | Wire 1–5 behind REST endpoints, CORS | HTTP requests | JSON / GeoJSON |
 | 7 | `frontend/src/` (React) | Call the API, render the map + panels | — | interactive demo in the browser |
+
+**Data-prep scripts** (run ahead of time, never during the demo; all outputs committed):
+
+| script | what it produces |
+|---|---|
+| `fetch_sar_tiles.py` | the real Sentinel-1 tiles + their bounding boxes |
+| `fetch_demo_uploads.py` | unseen tiles for the upload button, incl. two with no oil |
+| `fetch_ocean_forcing.py` | real hourly current + wind per event, and each event's detected position |
+| `fetch_coastline.py` | public-domain land polygons — the offline basemap |
+| `generate_ais.py` | the synthetic AIS roster and tracks |
+| `generate_sample_image.py` | the synthetic fallback tile |
+| `validate_detector.py` | detector IoU vs ground truth; `--gate` measures the refusal gate |
+| `smoke_test.py` | 78 assertions over the live HTTP API |
 
 Note: the sample imagery is served by component 6 too (`GET /api/images/{id}`),
 so the SAR tile the judge sees is the same file `detector.py` ran on.
@@ -58,7 +71,7 @@ need to renegotiate shapes mid-build.
 ```
 GET  /api/scenario
   → { "sample_images": [{"id": "sar_001", "label": "Paradip slick A"}, ...],
-      "region_center": [20.31, 86.61] }
+      "region_center": [20.05, 86.95] }
 
 POST /api/detect            body: { "image_id": "sar_001" }
   → { "spill_id": "SP-001", "polygon_geojson": <GeoJSON Polygon>,
@@ -137,7 +150,7 @@ a click-driven demo flow.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Backend language | Python 3.11+ | one language across the whole pipeline |
+| Backend language | Python 3.11+ (tested on 3.13) | one language across the whole pipeline |
 | API framework | **FastAPI + Uvicorn** | matches the submitted PPT; auto-generates OpenAPI docs at `/docs` for free, useful for R4 to explore the contract without asking R1–R3 |
 | CORS | `fastapi.middleware.cors.CORSMiddleware`, allow the Vite dev origin | the #1 first-hour failure mode for a split frontend/backend — set it up before anyone builds a feature |
 | Detection/CV | OpenCV + scikit-image | no training needed, thresholding + morphology is enough for a demo-quality mask |
@@ -147,7 +160,9 @@ a click-driven demo flow.
 | State/storage | in-memory (module-level dict/DataFrame in the FastAPI process) | FastAPI is a long-running server, so state naturally persists between requests without a session-state workaround; see `DB.md` |
 | Frontend | **React (Vite) + react-leaflet** | matches PPT ("Leaflet" is the map layer, React is the app shell); Vite gives near-instant hot reload, critical when the clock is running |
 | Frontend state | plain `useState`/`useEffect`, `fetch` (or `axios`) | a single linear flow (PRD.md §4) doesn't need Redux/Zustand — one extra dependency is one extra thing to debug |
-| Styling | plain CSS or a CDN utility framework (e.g. Tailwind via CDN) | no component library needed for a 5-screen demo flow |
+| Styling | plain CSS with custom properties | no component library needed; the same tokens drive light and dark themes |
+| Ocean forcing | Open-Meteo marine + forecast APIs | free, keyless, and real — retires the static vector `DRD.md` §2 originally accepted |
+| Offline basemap | Natural Earth land polygons | public domain, so no tile-usage policy to breach, and vector scales to any zoom |
 
 **Explicitly skipped for this round**: trained anomaly-detection models, live AIS feeds,
 PostGIS, Docker, auth, a production build (`vite build`) of the frontend — the dev server is

@@ -3,13 +3,15 @@
 
 Rule #1: plan for 40% of the full vision, build toward 60%. Never plan for 100%.
 
-**Status: a working, tested scaffold already exists** (backend + frontend, full pipeline
-verified against ground truth — see the repo). This changes the plan below significantly
-from a from-scratch build: most of the original Phase 1 is already done. The 10 hours now
-go toward real-data integration, the remaining SHOULD items, robustness, and rehearsal —
-which is a meaningfully lower-risk position to start Round 2 from. Treat every phase below
-as provisional — if the pre-round checklist (DRD.md §4) isn't fully done by the time the
-clock starts, that eats into Phase A first.
+**Status: Phases A–D are done. What remains is Phase E (rehearsal) and Phase F
+(freeze).** The phases below are kept as a record of what each covered and what
+actually came out of it — a plan nobody revisits is worse than no plan.
+
+The build now stands well beyond the original 60% target: all MUSTs, all four SHOULDs,
+real Sentinel-1 imagery, real ocean forcing, four distinct spill events, an attribution
+refusal gate, an upload path, an offline basemap, light/dark themes, and 78 automated
+checks. That is a comfortable position — the risk has moved from *"will it work"* to
+*"can we present it well"*, which is exactly what Phases E and F are for.
 
 ## PHASE A — Environment check, not a build (0:00–0:30)
 *Was "Foundation" in the original plan — now just proving everyone's laptop can run what
@@ -20,41 +22,43 @@ already exists.*
 - Confirm real Zenodo SAR image(s) are wired in per `DRD.md` §4 (should be done pre-round —
   if not, do it now, before anything else)
 
-**CHECKPOINT (0:30)**: full flow runs clean on every laptop, on the real (not synthetic)
-sample image. If any laptop can't get there, pair them with someone whose setup works
-rather than debugging solo — don't let one environment issue eat the whole team's morning.
+**CHECKPOINT (0:30) — PARTLY MET.** The flow runs clean and does so on real Sentinel-1
+imagery. What has *not* been done is confirming it on every teammate's laptop, and that is
+not a formality: `python-multipart` was added for the upload endpoint, so an existing setup
+fails at import until `pip install -r requirements.txt` is re-run. Use `python -m uvicorn`
+rather than bare `uvicorn` where a laptop has more than one Python.
 
-## PHASE B — Real-data integration + remaining SHOULD items (0:30–2:30)
-S1 (forecast path) and S3 (why-flagged reasons) are **already built and tested** in the
-scaffold — they're not tasks anymore, just verify they still render correctly with the real
-image swapped in.
-- Add 1–2 more real Zenodo sample images beyond the first, so the demo isn't a single
-  cherry-picked case if a judge asks "does it only work on that one image?"
-- **S2 — spill age estimate**: not yet built. A simple heuristic is enough (e.g. derived
-  from the hindcast confidence/radius) — see `BL.md`, this is explicitly "if feasible"
-- **S4 — look-alike confidence note**: not yet built. `detector.py` already scores/rejects
-  decoy regions internally — surface that as a UI note ("N candidate regions found, M
-  rejected as likely look-alikes") rather than building new detection logic
+## PHASE B — Real-data integration + remaining SHOULD items — DONE
+- ✅ Real Sentinel-1 tiles (three, plus a synthetic fallback), accuracy measured against
+  the dataset's own masks at mean IoU 0.43
+- ✅ **S2 age estimate** — from the slick's extent along the drift axis, independent of the
+  assumed satellite-pass lag rather than a restatement of it
+- ✅ **S4 look-alike note** — ambiguity + faintness, lowering the reported confidence
+- ✅ Beyond plan: **real ocean forcing** (hourly current + 3% windage, Open-Meteo) replacing
+  the invented drift vector, and **four distinct spill events** so switching tiles changes
+  the origin and the culprit
 
-## PHASE C — UI/UX polish + robustness (2:30–5:00)
-- Map interaction polish: legend, layer toggle, better vessel-click popups
-- Refine loading/error states (already present, make them feel intentional not default)
-- Re-run the full flow against every sample image added in Phase B — no crashes, no
-  inconsistent-looking results between them
+## PHASE C — UI/UX polish + robustness — DONE
+- ✅ Minimalist redesign; SAR tile under the polygon with an opacity slider; animated
+  backward drift resolving into the particle cloud; map fits its data
+- ✅ Light + dark themes, WCAG AA checked
+- ✅ Loading and error states; refused detections disable the downstream steps and say why
+- ✅ Full flow re-run against all four tiles and the upload path
 
-## PHASE D — Integration hardening (5:00–7:00)
-- Cold-start test: kill and restart both servers, confirm a clean run from nothing
-- Test on the actual presenting laptop + venue Wi-Fi if possible (the map's basemap tiles
-  need internet — confirm that works at the venue, or pre-cache/screenshot a fallback)
-- Fix laptop-specific quirks found in Phase A/C now, not during rehearsal
+## PHASE D — Integration hardening — MOSTLY DONE
+- ✅ Cold-start test automated — `scripts/smoke_test.py`, 78 assertions over the live API
+- ✅ Basemap no longer needs the venue's wifi: a public-domain Natural Earth coastline sits
+  under the raster tiles, and the map says "basemap offline" instead of going black
+- ✅ CORS widened to Vite's 5173–5176 fallback range; `/api/vessels/{id}` survives a reload
+- ⬜ **Still to do: run it on the actual presenting laptop, on the venue network.**
 
-## PHASE E — Rehearsal (7:00–8:45)
+## PHASE E — Rehearsal — NOT DONE, this is the priority
 - Full run-through of the demo script (`MASTER_REFERENCE_INDEX.md`), timed
 - Fix ONLY what breaks in rehearsal — no new features
 - Record a video/screenshot backup of a working run in case live demo, Wi-Fi, or CORS
   breaks in front of judges
 
-## PHASE F — Buffer + code freeze (8:45–10:00)
+## PHASE F — Buffer + code freeze — NOT DONE
 - **Code freeze by 9:15–9:30. Non-negotiable.**
 - Final checks: correct sample image loaded by default, browser zoomed/sized sensibly,
   backup video accessible offline
@@ -62,11 +66,11 @@ image swapped in.
 ## Role split (assumes 4–6 people; merge if smaller — see TASKS.md)
 | Role | Owns |
 |---|---|
-| R1 — Detection & CV | Phase B: real image swap, S4 look-alike note |
-| R2 — Drift & Oceanography | Phase B: S2 age estimate |
-| R3 — AIS & Attribution | Verify funnel/scoring holds up across the new sample images |
-| R4 — React Frontend & Integration | Phase C UI polish, owns Phase D's cold-start test |
-| R5 — Data prep & presentation | Owns Phase E rehearsal + backup recording |
+| R1 — Detection & CV | ✅ done. Now: be the one who can explain the refusal gate |
+| R2 — Drift & Oceanography | ✅ done. Now: be the one who can explain real forcing vs. the old constant |
+| R3 — AIS & Attribution | ✅ done. Now: own the "isn't it hardcoded?" answer — switch tiles, show four culprits |
+| R4 — React Frontend & Integration | ✅ done. Now: own the presenting laptop and the venue network test |
+| R5 — Data prep & presentation | **Phase E rehearsal + backup recording. Nothing else is blocking.** |
 
 If the team is 4 people, fold R5 into whichever of R1–R4 has the lightest load once Phase B
 is done — don't merge R4, it still has the most integration surface area in this stack.
