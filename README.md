@@ -14,6 +14,12 @@ plain-language "why flagged" reasons.
 
 ## Run it (two terminals)
 
+> **Pulling this branch onto an existing setup?** Re-run `pip install -r
+> requirements.txt`. `python-multipart` was added for the upload endpoint, and
+> without it the app fails at import with a stack trace rather than a hint. Make
+> sure you use the same interpreter you run `uvicorn` with — if you have more
+> than one Python installed, `python -m uvicorn ...` is safer than `uvicorn ...`.
+
 **Terminal 1 - backend**
 ```bash
 cd backend
