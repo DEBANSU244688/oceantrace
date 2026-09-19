@@ -35,11 +35,18 @@ def make_image():
     size = config.IMAGE_SIZE_PX
     half_km = config.IMAGE_HALF_WIDTH_KM
 
+    # This tile stands in for one particular spill event — whichever one
+    # sar_001 is bound to in config.SAMPLE_IMAGES.
+    meta = next(i for i in config.SAMPLE_IMAGES if i["id"] == "sar_001")
+    sc = config.scenario(meta.get("scenario"))
+    det_lat, det_lon = sc["detected_lat"], sc["detected_lon"]
+    print(f"Scenario: {sc['id']} {sc['label']} (guilty: {sc['guilty']})")
+
     # geographic bounding box of the image
-    lat_top, _ = geo_utils.project(config.DETECTED_LAT, config.DETECTED_LON, 0, half_km)
-    lat_bottom, _ = geo_utils.project(config.DETECTED_LAT, config.DETECTED_LON, 180, half_km)
-    _, lon_right = geo_utils.project(config.DETECTED_LAT, config.DETECTED_LON, 90, half_km)
-    _, lon_left = geo_utils.project(config.DETECTED_LAT, config.DETECTED_LON, 270, half_km)
+    lat_top, _ = geo_utils.project(det_lat, det_lon, 0, half_km)
+    lat_bottom, _ = geo_utils.project(det_lat, det_lon, 180, half_km)
+    _, lon_right = geo_utils.project(det_lat, det_lon, 90, half_km)
+    _, lon_left = geo_utils.project(det_lat, det_lon, 270, half_km)
     bbox = {"lat_top": lat_top, "lat_bottom": lat_bottom,
             "lon_left": lon_left, "lon_right": lon_right}
 
@@ -64,7 +71,7 @@ def make_image():
     img = base.copy()
 
     # the actual slick, centered on the ground-truth DETECTED_LAT/LON
-    cx, cy = latlon_to_px(config.DETECTED_LAT, config.DETECTED_LON)
+    cx, cy = latlon_to_px(det_lat, det_lon)
     img -= add_dark_blob(cx, cy, rx=55, ry=32, angle_deg=35, darkness=95)
 
     # two look-alike decoys (low-wind patch + a biogenic-style slick) —
@@ -82,7 +89,7 @@ def make_image():
     print(f"Wrote {out_dir/'sar_001.png'} ({size}x{size})")
     print(f"Bounding box: {bbox}")
     print(f"Ground-truth slick center (px): ({cx:.1f}, {cy:.1f}) "
-          f"-> lat/lon ({config.DETECTED_LAT:.5f}, {config.DETECTED_LON:.5f})")
+          f"-> lat/lon ({det_lat:.5f}, {det_lon:.5f})")
 
 
 if __name__ == "__main__":

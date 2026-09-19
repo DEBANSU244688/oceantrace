@@ -17,15 +17,20 @@ class SpillGeometry:
     centroid: tuple  # (lat, lon)
 
 
-def _px_to_latlon(x, y, image_size_px, bbox):
-    lon = bbox["lon_left"] + (x / image_size_px) * (bbox["lon_right"] - bbox["lon_left"])
-    lat = bbox["lat_top"] - (y / image_size_px) * (bbox["lat_top"] - bbox["lat_bottom"])
+def _px_to_latlon(x, y, width_px, height_px, bbox):
+    lon = bbox["lon_left"] + (x / width_px) * (bbox["lon_right"] - bbox["lon_left"])
+    lat = bbox["lat_top"] - (y / height_px) * (bbox["lat_top"] - bbox["lat_bottom"])
     return lat, lon
 
 
-def characterize(contour_px: np.ndarray, image_size_px: int, bbox: dict) -> SpillGeometry:
-    """`contour_px` is an Nx2 array of (x, y) pixel coordinates from detector.py."""
-    latlon_ring = [_px_to_latlon(x, y, image_size_px, bbox) for x, y in contour_px]
+def characterize(contour_px: np.ndarray, image_shape, bbox: dict) -> SpillGeometry:
+    """`contour_px` is an Nx2 array of (x, y) pixel coordinates from detector.py.
+    `image_shape` is the source image's (height, width) — taken from the image
+    itself rather than a config constant, since real downloaded tiles come in
+    whatever size the dataset shipped them at (the SOS tiles are 256x256, the
+    synthetic one is 512x512) and need not be square."""
+    height_px, width_px = image_shape[0], image_shape[1]
+    latlon_ring = [_px_to_latlon(x, y, width_px, height_px, bbox) for x, y in contour_px]
     # shapely / GeoJSON both want (lon, lat) ordering
     lonlat_ring = [(lon, lat) for lat, lon in latlon_ring]
     if len(lonlat_ring) < 3:

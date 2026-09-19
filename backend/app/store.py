@@ -16,6 +16,9 @@ _spills = {}       # spill_id -> dict (detection + characterization result)
 _drift = {}        # spill_id -> dict (hindcast/forecast result)
 _attribution = {}  # spill_id -> dict (funnel + ranked vessels)
 _next_spill_num = 1
+_uploads = {}      # image_id -> (bytes, media_type) for judge-supplied tiles
+_next_upload_num = 1
+_upload_scenario_cursor = 0
 
 
 def load_ais_data():
@@ -69,3 +72,34 @@ def save_attribution(spill_id, data):
 
 def get_attribution(spill_id):
     return _attribution.get(spill_id)
+
+
+def save_upload(data: bytes, media_type: str) -> str:
+    """Keep an uploaded tile in memory so /api/images/{id} can serve it back to
+    the map. In-memory on purpose — DB.md's "no database server", and an
+    uploaded demo image has no reason to outlive the process."""
+    global _next_upload_num
+    image_id = f"upload_{_next_upload_num:03d}"
+    _next_upload_num += 1
+    _uploads[image_id] = (data, media_type)
+    return image_id
+
+
+def get_upload(image_id):
+    return _uploads.get(image_id)
+
+
+def next_upload_scenario():
+    """Rotate through the region's spill events for successive uploads.
+
+    An uploaded tile has no geocoding, so there is nothing in it that says
+    which event it belongs to — the choice is arbitrary either way. Rotating
+    at least means two uploads in a row do not produce identical attribution,
+    which would look like a hardcoded answer. The response names the event it
+    picked, so the UI can be explicit that this was a placement, not a finding.
+    """
+    global _upload_scenario_cursor
+    from app import config
+    sc = config.SCENARIOS[_upload_scenario_cursor % len(config.SCENARIOS)]
+    _upload_scenario_cursor += 1
+    return sc

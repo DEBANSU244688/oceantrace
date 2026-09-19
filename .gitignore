@@ -18,3 +18,6 @@ dist/
 # Editor
 .vscode/
 .idea/
+
+# scripts/validate_detector.py caches the 28 MB ground-truth masks here
+backend/data/.validation_cache/

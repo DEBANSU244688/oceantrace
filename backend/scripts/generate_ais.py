@@ -44,20 +44,36 @@ from app import config  # noqa: E402  (import after sys.path fix, deliberate)
 # detection sample image, and the drift engine can never drift out of sync.
 # ---------------------------------------------------------------------------
 SEED = 7
-ORIGIN_LAT, ORIGIN_LON = config.ORIGIN_LAT, config.ORIGIN_LON
-SPILL_WINDOW_MID = config.SPILL_TIME
-SPILL_WINDOW_START = SPILL_WINDOW_MID - timedelta(hours=config.SPILL_WINDOW_HOURS / 2)
-SPILL_WINDOW_END = SPILL_WINDOW_MID + timedelta(hours=config.SPILL_WINDOW_HOURS / 2)
+REGION_LAT, REGION_LON = config.REGION_CENTER
+SCENARIOS = config.SCENARIOS
+
+
+def window_for(sc):
+    half = timedelta(hours=config.SPILL_WINDOW_HOURS / 2)
+    return sc["spill_time"] - half, sc["spill_time"] + half
 
 HOME_MIN_KM = 25                    # every vessel's home is at least this far
-HOME_MAX_KM = 90                    # ...and at most this far from the origin,
-                                     # so proximity to the origin only ever
-                                     # comes from a deliberate warp, never chance
+HOME_MAX_KM = 90                    # ...and at most this far from the region
+                                     # centre, so proximity to any spill origin
+                                     # only ever comes from a deliberate warp,
+                                     # never from chance
+
+# Vessel homes are drawn from a seaward arc only. Without this, a ring around
+# the origin puts roughly a sixth of the roster on dry land west of Paradip,
+# which is the kind of thing a judge notices the moment they zoom out. The arc
+# was measured against ETOPO1 bathymetry: from config.ORIGIN, bearings 10°-250°
+# are open water all the way to HOME_MAX_KM, 260°-360° hit the coast. Re-measure
+# this if you move the scenario (see the note in app/config.py).
+SEAWARD_BEARING_DEG = (15, 245)
 PER_VESSEL_WANDER_KM = 14           # how far a vessel roams from its own home
 
 TRACK_HOURS = 60
 STEP_MINUTES = 20
-N_CLEAN_VESSELS = 19  # + 1 guilty + 3 near-miss + 3 false-positive = 26 total
+# Each of the four spill events gets its own guilty vessel, its own near-miss
+# (right place, wrong time) and its own false positive (right time, wrong
+# place), so every event's funnel is interesting on its own rather than one
+# event carrying the whole demo.
+N_CLEAN_VESSELS = 26 - 3 * len(SCENARIOS)   # 14
 
 VESSEL_TYPES = ["tanker", "cargo", "fishing", "container", "bulk carrier"]
 NAME_POOL = [
@@ -76,9 +92,16 @@ random.seed(SEED)
 from app.geo_utils import haversine_km, km_to_deg_lat, km_to_deg_lon  # noqa: E402
 
 
-def random_point_within_radius(center_lat, center_lon, radius_km, min_radius_km=0):
+def random_point_within_radius(center_lat, center_lon, radius_km, min_radius_km=0,
+                               bearing_range_deg=None):
+    """Uniform-area sample from an annulus. `bearing_range_deg` narrows it to a
+    compass arc (0 = north, 90 = east) — used to keep vessel homes offshore."""
     r_km = min_radius_km + (radius_km - min_radius_km) * math.sqrt(random.random())
-    theta = random.uniform(0, 2 * math.pi)
+    if bearing_range_deg is None:
+        theta = random.uniform(0, 2 * math.pi)
+    else:
+        lo, hi = bearing_range_deg
+        theta = math.radians(random.uniform(lo, hi))
     dlat = km_to_deg_lat(r_km * math.cos(theta))
     dlon = km_to_deg_lon(r_km * math.sin(theta), center_lat)
     return center_lat + dlat, center_lon + dlon
@@ -150,51 +173,78 @@ def apply_anomaly(rows, idx, half_window_steps=2):
 
 
 def build_roster():
-    names = random.sample(NAME_POOL, 1 + 3 + 3 + N_CLEAN_VESSELS)
-    roles = (["guilty"] + ["near_miss"] * 3 + ["false_positive"] * 3
-             + ["clean"] * N_CLEAN_VESSELS)
-    vessels = []
-    for i, (name, role) in enumerate(zip(names, roles)):
-        vessels.append({
-            "vessel_id": f"V{i+1:03d}",
-            "name": name,
-            "type": random.choice(VESSEL_TYPES),
-            "_role": role,  # internal only, not written to vessels.json
-        })
-    return vessels
+    """One roster covering the whole region. The guilty vessels are named in
+    app/config.py so the scenario, the sample image bound to it and the smoke
+    test all agree on who did it."""
+    guilty_names = [sc["guilty"] for sc in SCENARIOS]
+    for name in guilty_names:
+        assert name in NAME_POOL, f"{name} is not in NAME_POOL"
+
+    remaining = [n for n in NAME_POOL if n not in guilty_names]
+    needed = 2 * len(SCENARIOS) + N_CLEAN_VESSELS
+    others = random.sample(remaining, needed)
+
+    assignments = []
+    for sc, name in zip(SCENARIOS, guilty_names):
+        assignments.append((name, "guilty", sc["id"]))
+    cursor = 0
+    for sc in SCENARIOS:
+        assignments.append((others[cursor], "near_miss", sc["id"]))
+        assignments.append((others[cursor + 1], "false_positive", sc["id"]))
+        cursor += 2
+    for name in others[cursor:]:
+        assignments.append((name, "clean", None))
+
+    return [{
+        "vessel_id": f"V{i+1:03d}",
+        "name": name,
+        "type": random.choice(VESSEL_TYPES),
+        "_role": role,            # internal only, not written to vessels.json
+        "_scenario": scenario_id,
+    } for i, (name, role, scenario_id) in enumerate(assignments)]
 
 
 def build_positions(vessels):
-    track_start = SPILL_WINDOW_MID - timedelta(hours=TRACK_HOURS / 2)
+    track_start = config.TRACK_ANCHOR - timedelta(hours=TRACK_HOURS / 2)
     all_rows = []
     verification = []
 
     for vessel in vessels:
         role = vessel["_role"]
+        sc = config.SCENARIOS_BY_ID.get(vessel["_scenario"])
 
-        # every vessel's home is drawn from a ring around the ORIGIN itself
-        # (not the port) so proximity to the origin is never accidental —
-        # it only happens via the deliberate warp below.
+        # Homes are drawn from a seaward arc around the region centre, not
+        # around any one spill origin — otherwise every vessel would cluster on
+        # whichever event happened to be first in the list.
         home_lat, home_lon = random_point_within_radius(
-            ORIGIN_LAT, ORIGIN_LON, HOME_MAX_KM, min_radius_km=HOME_MIN_KM)
+            REGION_LAT, REGION_LON, HOME_MAX_KM, min_radius_km=HOME_MIN_KM,
+            bearing_range_deg=SEAWARD_BEARING_DEG)
 
         base_speed = random.uniform(9, 15)
         rows = random_walk_track(home_lat, home_lon, track_start, TRACK_HOURS,
                                   STEP_MINUTES, base_speed, max_radius_km=PER_VESSEL_WANDER_KM)
 
-        if role == "guilty":
-            idx = warp_through_point(rows, SPILL_WINDOW_MID, ORIGIN_LAT, ORIGIN_LON,
-                                      blend_hours=2, step_minutes=STEP_MINUTES)
-            apply_anomaly(rows, idx)
-        elif role == "near_miss":
-            off_ts = SPILL_WINDOW_MID - timedelta(hours=random.choice([28, 32, 36]))
-            jitter_lat, jitter_lon = random_point_within_radius(ORIGIN_LAT, ORIGIN_LON, 3)
-            warp_through_point(rows, off_ts, jitter_lat, jitter_lon,
-                                blend_hours=2, step_minutes=STEP_MINUTES)
-        elif role == "false_positive":
-            far_lat, far_lon = random_point_within_radius(ORIGIN_LAT, ORIGIN_LON, 28, min_radius_km=20)
-            warp_through_point(rows, SPILL_WINDOW_MID, far_lat, far_lon,
-                                blend_hours=2, step_minutes=STEP_MINUTES)
+        if sc is not None:
+            origin_lat, origin_lon = sc["origin_lat"], sc["origin_lon"]
+            spill_mid = sc["spill_time"]
+
+            if role == "guilty":
+                idx = warp_through_point(rows, spill_mid, origin_lat, origin_lon,
+                                          blend_hours=2, step_minutes=STEP_MINUTES)
+                apply_anomaly(rows, idx)
+            elif role == "near_miss":
+                # right place, wrong time — well outside this event's window
+                off_ts = spill_mid - timedelta(hours=random.choice([28, 32, 36]))
+                jitter_lat, jitter_lon = random_point_within_radius(
+                    origin_lat, origin_lon, 3)
+                warp_through_point(rows, off_ts, jitter_lat, jitter_lon,
+                                    blend_hours=2, step_minutes=STEP_MINUTES)
+            elif role == "false_positive":
+                # right time, wrong place — inside the window but too far out
+                far_lat, far_lon = random_point_within_radius(
+                    origin_lat, origin_lon, 28, min_radius_km=20)
+                warp_through_point(rows, spill_mid, far_lat, far_lon,
+                                    blend_hours=2, step_minutes=STEP_MINUTES)
         # "clean" vessels: no warp at all
 
         for r in rows:
@@ -203,16 +253,26 @@ def build_positions(vessels):
                               "speed_knots": r["speed_knots"], "course_deg": r["course_deg"],
                               "status": r["status"]})
 
-        in_window = [r for r in rows if SPILL_WINDOW_START <= r["ts"] <= SPILL_WINDOW_END]
-        min_in_window = min((haversine_km(r["lat"], r["lon"], ORIGIN_LAT, ORIGIN_LON)
-                              for r in in_window), default=float("nan"))
-        global_min_row = min(rows, key=lambda r: haversine_km(r["lat"], r["lon"], ORIGIN_LAT, ORIGIN_LON))
-        global_min_dist = haversine_km(global_min_row["lat"], global_min_row["lon"], ORIGIN_LAT, ORIGIN_LON)
+        # Verify against the event this vessel was built for; clean vessels are
+        # checked against whichever origin they wandered closest to.
+        check_scenarios = [sc] if sc is not None else SCENARIOS
+        best = None
+        for candidate in check_scenarios:
+            w_start, w_end = window_for(candidate)
+            o_lat, o_lon = candidate["origin_lat"], candidate["origin_lon"]
+            in_window = [r for r in rows if w_start <= r["ts"] <= w_end]
+            min_in_window = min((haversine_km(r["lat"], r["lon"], o_lat, o_lon)
+                                  for r in in_window), default=float("nan"))
+            closest = min(rows, key=lambda r: haversine_km(r["lat"], r["lon"], o_lat, o_lon))
+            global_min = haversine_km(closest["lat"], closest["lon"], o_lat, o_lon)
+            if best is None or global_min < best[1]:
+                best = (candidate["id"], global_min, min_in_window)
+
         verification.append({
             "vessel_id": vessel["vessel_id"], "name": vessel["name"], "role": role,
-            "min_dist_in_window_km": round(min_in_window, 1),
-            "global_min_dist_km": round(global_min_dist, 1),
-            "global_min_dist_ts": global_min_row["ts"].isoformat(),
+            "scenario": best[0] if role != "clean" else f"~{best[0]}",
+            "min_dist_in_window_km": round(best[2], 1),
+            "global_min_dist_km": round(best[1], 1),
         })
 
     return all_rows, verification
@@ -234,13 +294,23 @@ def main():
 
     print(f"Wrote {len(roster_out)} vessels -> {out_dir/'vessels.json'}")
     print(f"Wrote {len(df)} position rows -> {out_dir/'ais_positions.csv'}")
-    print(f"Spill window: {SPILL_WINDOW_START.isoformat()} .. {SPILL_WINDOW_END.isoformat()}")
-    print(f"Origin zone: {ORIGIN_LAT}, {ORIGIN_LON}\n")
+    track_start = config.TRACK_ANCHOR - timedelta(hours=TRACK_HOURS / 2)
+    print(f"Track window: {track_start.isoformat()} .. "
+          f"{(track_start + timedelta(hours=TRACK_HOURS)).isoformat()}\n")
 
-    print(f"{'vessel':<10}{'name':<20}{'role':<16}{'min_dist_in_window':>20}{'global_min_dist':>18}")
-    for v in verification:
-        print(f"{v['vessel_id']:<10}{v['name']:<20}{v['role']:<16}"
-              f"{v['min_dist_in_window_km']:>17.1f} km{v['global_min_dist_km']:>15.1f} km")
+    print("Spill events:")
+    for sc in SCENARIOS:
+        w_start, w_end = window_for(sc)
+        print(f"  {sc['id']}  {sc['label']:22} origin {sc['origin_lat']},{sc['origin_lon']}"
+              f"  window {w_start:%m-%d %H:%M}..{w_end:%H:%M}  guilty: {sc['guilty']}")
+    print()
+
+    print(f"{'vessel':<9}{'name':<20}{'role':<16}{'event':<9}"
+          f"{'in-window':>12}{'closest':>11}")
+    order = {"guilty": 0, "near_miss": 1, "false_positive": 2, "clean": 3}
+    for v in sorted(verification, key=lambda v: (order[v["role"]], v["scenario"])):
+        print(f"{v['vessel_id']:<9}{v['name']:<20}{v['role']:<16}{v['scenario']:<9}"
+              f"{v['min_dist_in_window_km']:>9.1f} km{v['global_min_dist_km']:>8.1f} km")
 
 
 if __name__ == "__main__":
