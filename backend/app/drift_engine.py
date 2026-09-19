@@ -131,9 +131,65 @@ def forecast(centroid_lat, centroid_lon, hours=None) -> DriftResult:
     return _cloud_to_result(lats, lons, path)
 
 
-def estimate_spill_window(hindcast_hours=None):
-    """+/- 2h uncertainty band around the hindcast-implied spill time."""
+def estimate_spill_age(polygon_geojson):
+    """S2 — estimate how long the slick has been drifting, from its own shape.
+
+    A spill from an effectively point-like source that has been advected for T
+    hours gets smeared into a streak along the drift axis roughly v*T long. So
+    measuring the slick's extent *along the drift bearing* and dividing by the
+    drift speed gives an age estimate that comes from the image, independent of
+    config.HINDCAST_HOURS (which is an assumed satellite-pass lag, not a
+    measurement). Showing both is the point: two independent routes to the same
+    number is a much better answer than one assumption restated twice.
+
+    Confidence comes from elongation. A long thin streak is strong evidence of
+    directional drift; a blob that is as wide as it is long carries almost no
+    temporal information, and we say so rather than quoting a firm number.
+    """
+    coords = polygon_geojson.get("coordinates") or []
+    if not coords or not coords[0]:
+        return None
+    ring = coords[0]                       # GeoJSON Polygon: [[[lon, lat], ...]]
+    lons = np.array([c[0] for c in ring], dtype=float)
+    lats = np.array([c[1] for c in ring], dtype=float)
+    mean_lat = float(np.mean(lats))
+
+    # local flat projection to km (east, north), same approximation as elsewhere
+    x_km = (lons - float(np.mean(lons))) * 111.320 * np.cos(np.radians(mean_lat))
+    y_km = (lats - mean_lat) * 110.574
+
+    # unit vector along the drift bearing (0 = north, 90 = east)
+    rad = np.radians(config.DRIFT_BEARING_DEG)
+    along = x_km * np.sin(rad) + y_km * np.cos(rad)
+    across = x_km * np.cos(rad) - y_km * np.sin(rad)
+
+    length_km = float(along.max() - along.min())
+    width_km = float(across.max() - across.min())
+    if config.DRIFT_SPEED_KMH <= 0:
+        return None
+
+    age_hours = length_km / config.DRIFT_SPEED_KMH
+    elongation = length_km / max(width_km, 1e-6)
+    # elongation 1.0 (round blob) -> ~0.15, elongation 3+ -> ~0.9
+    confidence = float(np.clip((elongation - 1.0) / 2.0, 0.0, 1.0) * 0.75 + 0.15)
+
+    return {
+        "estimated_age_hours": round(age_hours, 1),
+        "confidence": round(confidence, 3),
+        "along_drift_km": round(length_km, 2),
+        "across_drift_km": round(width_km, 2),
+        "method": ("slick extent along the drift axis divided by drift speed; "
+                    "independent of the assumed satellite-pass lag"),
+    }
+
+
+def estimate_spill_window(detection_ts, hindcast_hours=None):
+    """+/- 2h uncertainty band around the hindcast-implied spill time.
+
+    `detection_ts` is when the satellite acquired the tile, which is a property
+    of the image, not a global — each sample tile belongs to a different spill
+    event with its own overpass time (see config.SCENARIOS)."""
     hindcast_hours = hindcast_hours or config.HINDCAST_HOURS
-    implied_spill_time = config.DETECTION_TS - timedelta(hours=hindcast_hours)
+    implied_spill_time = detection_ts - timedelta(hours=hindcast_hours)
     half = timedelta(hours=config.SPILL_WINDOW_HOURS / 2)
     return implied_spill_time - half, implied_spill_time + half

@@ -10,6 +10,15 @@ class DetectRequest(BaseModel):
     image_id: str
 
 
+class ImageBBox(BaseModel):
+    """Geographic footprint of a sample tile, as written by
+    scripts/generate_sample_image.py into <image_id>_meta.json."""
+    lat_top: float
+    lat_bottom: float
+    lon_left: float
+    lon_right: float
+
+
 class DetectResponse(BaseModel):
     spill_id: str
     polygon_geojson: dict
@@ -17,6 +26,23 @@ class DetectResponse(BaseModel):
     perimeter_km: float
     centroid: list  # [lat, lon]
     confidence: float
+    image_id: str
+    image_bbox: ImageBBox
+    image_url: str  # path on this API, relative to its base URL
+    # S4 — look-alike context (see detector.py)
+    candidate_regions: int
+    rejected_lookalikes: int
+    lookalike_risk: float
+    lookalike_note: str
+    # Whether this detection clears the bar for tracing an origin and naming a
+    # vessel. False means /api/drift and /api/attribution will refuse it.
+    attributable: bool
+    attribution_block_reason: Optional[str] = None
+    source: str = "sample"  # "sample" | "upload"
+    # which spill event this image is an observation of — different tiles are
+    # bound to different events, so this changes with the image
+    scenario_id: str
+    scenario_label: str
 
 
 class DriftRequest(BaseModel):
@@ -35,10 +61,22 @@ class SpillWindow(BaseModel):
     end: str
 
 
+class AgeEstimate(BaseModel):
+    """S2 — derived from the slick's own geometry, not from the assumed lag."""
+    estimated_age_hours: float
+    confidence: float
+    along_drift_km: float
+    across_drift_km: float
+    method: str
+
+
 class DriftResponse(BaseModel):
     origin_zone: OriginZone
     spill_window: SpillWindow
     forecast_path_geojson: Optional[dict] = None
+    # the backward run's centroid track, so the map can animate the hindcast
+    hindcast_path_geojson: Optional[dict] = None
+    age_estimate: Optional[AgeEstimate] = None
 
 
 class AttributionRequest(BaseModel):

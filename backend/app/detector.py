@@ -23,6 +23,32 @@ class DetectionResult:
     mask: np.ndarray            # binary mask, same size as input image
     contour_px: np.ndarray      # Nx2 array of (x, y) pixel coordinates
     confidence: float           # 0-1 heuristic confidence
+    candidate_regions: int      # dark regions that survived thresholding
+    rejected_lookalikes: int    # ...of which this many lost to the winner
+    lookalike_risk: float       # 0-1, how ambiguous this detection is (S4)
+    lookalike_note: str         # one plain sentence for the UI
+
+
+def attribution_gate(confidence, lookalike_risk):
+    """Is this detection solid enough to trace and attribute?
+
+    Returns (attributable, reason). `reason` is None when the detection passes,
+    and otherwise a sentence fit to show a user — this text is the whole point
+    of the gate, so it has to explain itself rather than just saying "no".
+    """
+    if confidence < config.MIN_ATTRIBUTION_CONFIDENCE:
+        return False, (
+            f"Detection confidence {confidence:.0%} is below the "
+            f"{config.MIN_ATTRIBUTION_CONFIDENCE:.0%} threshold required to trace an "
+            f"origin or name a vessel. The darkest region in this scene is not "
+            f"convincingly an oil slick.")
+    if lookalike_risk > config.MAX_ATTRIBUTION_LOOKALIKE_RISK:
+        return False, (
+            f"Look-alike risk {lookalike_risk:.0%} exceeds the "
+            f"{config.MAX_ATTRIBUTION_LOOKALIKE_RISK:.0%} ceiling. This scene has several "
+            f"comparably dark regions, so the one selected cannot be attributed "
+            f"to a vessel with any confidence.")
+    return True, None
 
 
 def _compactness(contour_px, area_px):
@@ -66,7 +92,8 @@ def detect(image_gray: np.ndarray) -> DetectionResult:
         area = cv2.contourArea(c)
         return area * (0.5 + 0.5 * _compactness(c, area))
 
-    best = max(contours, key=score)
+    ranked = sorted(contours, key=score, reverse=True)
+    best = ranked[0]
     best_area_px = cv2.contourArea(best)
     compactness = _compactness(best, best_area_px)
 
@@ -81,11 +108,54 @@ def detect(image_gray: np.ndarray) -> DetectionResult:
         0.05, 0.99,
     ))
 
+    # ---- S4: look-alike risk -------------------------------------------
+    # Oil is not the only thing that goes dark in SAR. Low-wind areas,
+    # biogenic slicks, rain cells and current fronts all suppress backscatter
+    # the same way, and they are the dominant false-positive source in real
+    # operational use. We do not have a classifier for them (BL.md S4 says we
+    # don't need one) — what we can honestly report is how *ambiguous* this
+    # particular detection was, from two signals we already computed:
+    #
+    #   ambiguity — how close the runner-up region scored to the winner. A
+    #               near-tie means the scene has several equally slick-like
+    #               dark patches and our pick is weakly justified.
+    #   faintness — low contrast against the scene mean. A genuine thick
+    #               slick is much darker than the sea around it; a low-wind
+    #               patch is only slightly darker.
+    ambiguity = 0.0
+    if len(ranked) > 1:
+        best_score, runner_up = score(ranked[0]), score(ranked[1])
+        if best_score > 0:
+            ambiguity = float(np.clip(runner_up / best_score, 0.0, 1.0))
+    faintness = float(np.clip(1 - contrast / 60, 0.0, 1.0))
+    lookalike_risk = float(np.clip(0.55 * ambiguity + 0.45 * faintness, 0.0, 1.0))
+
+    # Ambiguity lowers the confidence we report, rather than being a separate
+    # number nobody looks at — BL.md S4 asks for exactly this.
+    confidence = confidence * (1 - 0.25 * lookalike_risk)
+
+    rejected = len(ranked) - 1
+    if rejected and lookalike_risk > 0.5:
+        note = (f"{rejected} other dark region{'s' if rejected != 1 else ''} in this scene "
+                f"scored close to the one selected — treat as possible look-alikes "
+                f"(low-wind area, biogenic slick, rain cell)")
+    elif rejected:
+        note = (f"{rejected} other dark region{'s' if rejected != 1 else ''} found and "
+                f"rejected as look-alikes")
+    elif lookalike_risk > 0.5:
+        note = "only one candidate region, but it is faint — look-alike risk is elevated"
+    else:
+        note = "single clear candidate region, no significant look-alike competition"
+
     single_mask = np.zeros_like(mask)
     cv2.drawContours(single_mask, [best], -1, 255, thickness=cv2.FILLED)
 
     return DetectionResult(
         mask=single_mask,
         contour_px=best.reshape(-1, 2),
-        confidence=round(confidence, 3),
+        confidence=round(float(np.clip(confidence, 0.05, 0.99)), 3),
+        candidate_regions=len(ranked),
+        rejected_lookalikes=rejected,
+        lookalike_risk=round(lookalike_risk, 3),
+        lookalike_note=note,
     )
