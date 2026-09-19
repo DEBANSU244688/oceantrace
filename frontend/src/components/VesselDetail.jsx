@@ -1,7 +1,12 @@
 export default function VesselDetail({ vessel, loading, error }) {
-  if (loading) return <p className="empty-hint"><span className="spinner" />Loading vessel detail…</p>;
+  if (loading)
+    return (
+      <p className="empty-hint">
+        <span className="spinner" /> Loading vessel detail…
+      </p>
+    );
   if (error) return <div className="error-banner">{error}</div>;
-  if (!vessel) return <p className="empty-hint">Select a vessel above to see why it was flagged.</p>;
+  if (!vessel) return <p className="empty-hint">Select a vessel to see why it was flagged.</p>;
 
   return (
     <div>
