@@ -353,6 +353,14 @@ synthetic tile they agree closely (3.7 h vs 4.0 h). On a small real crop the
 geometry estimate is low *and reports low confidence*, which is the system
 being honest rather than confident and wrong.
 
+**"Isn't EMSA / SkyTruth already doing this?"**
+Yes — name them yourself before the judge does. CleanSeaNet (operational since
+2007, AIS correlation, backward drift), Cerulean (automated, deep learning,
+public), GNOME (which INCOIS already runs for the Indian Coast Guard). What is
+ours is the auditable scored attribution layer, the calibrated refusal, and the
+fact that India has the detection end and the trajectory end but nothing that
+closes the loop between them. Full briefing in `JUDGE_QA_PREP.md` Theme 4.
+
 **"Why not deep learning?"**
 Time budget — and we can tell you what classical CV actually scores. A trained
 model is the obvious next sprint; the detector sits behind a fixed interface,

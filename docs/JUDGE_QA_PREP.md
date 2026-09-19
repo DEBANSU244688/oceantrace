@@ -16,6 +16,7 @@ Skim time: 5 minutes. One person should own each theme.
 | Orchestration | **READY** | *"The API contract is the handoff. Four stages, one direction, no magic."* |
 | Scalability | **PARTIAL** | *"Stateless workers + a queue. Our state is in-process today — that's the first thing to change."* |
 | Real-time imagery | **GAP** | *"We don't task satellites. NTRO already can. We're the analysis layer that makes the image worth having."* |
+| Prior art | **READY** | *"Most of this exists — CleanSeaNet, Cerulean, GNOME. We built the auditable attribution layer between them, and India has none."* |
 
 **Never say "agents."** We don't have any. The word appears nowhere in our repo —
 keep it that way. (See Theme 1.)
@@ -178,18 +179,98 @@ REACT acronym. Wrong specifics in front of a judge cost more than omitting them 
 
 ---
 
+---
+
+## Theme 4 — Prior art: *"this already exists, doesn't it?"*
+
+**Yes, largely. Know this before you walk in.** Being unaware of CleanSeaNet in a
+room that knows about CleanSeaNet is the fastest way to lose credibility. Naming
+it yourself is the fastest way to gain some.
+
+**Likely questions**
+- Isn't EMSA already doing this?
+- What's actually new here?
+- Why would NTRO need this if the models already exist?
+
+**Readiness: READY, but only if you lead with the prior art.**
+
+### What exists
+
+| System | Who | What it does |
+|---|---|---|
+| **CleanSeaNet** | EMSA, EU, operational since 2007 | Near-real-time SAR spill detection. Trained operators correlate detections with AIS from SafeSeaNet to identify the likely polluter. Its operator integrates **backward and forward drift** to estimate the source. Imagery has been used as evidence in court. |
+| **Cerulean** | SkyTruth, global, public | Fully automated. A ResNet34 U-Net over every Sentinel-1 VV scene, then matches slicks against public AIS from −8 h to +6 h around the acquisition to name likely sources. Public near-real-time database. |
+| **OOSA** | INCOIS, India, since 2015 | Online Oil Spill Advisory for the Indian Coast Guard. NOAA's **GNOME** trajectory model adapted for the Indian Ocean, coupled to ocean circulation and atmospheric models. Validated against Sentinel-1 observations. |
+| **GNOME / ADIOS** | NOAA | The standard oil trajectory model. Forward and backward. |
+| **OpenDrift / OpenOil** | Norwegian Met Institute | Open-source Lagrangian particle drift framework with an oil module and backtracking. |
+
+So: SAR detection is decades old, particle backtracking to a source is standard
+practice, and AIS correlation is operational in two separate systems today.
+
+### Say this — and say it first
+
+> "Most of this exists. EMSA's CleanSeaNet has been doing satellite spill detection
+> with AIS correlation since 2007, SkyTruth's Cerulean does it automatically and
+> publicly with a deep learning model, and NOAA's GNOME — which INCOIS already runs
+> for the Indian Coast Guard — does the drift modelling. We didn't invent the
+> pipeline. What we built is the part that is missing between them."
+
+### What is actually ours — claim these, and nothing more
+
+1. **An auditable attribution score, not an analyst judgement or a proximity match.**
+   CleanSeaNet leaves the call to trained operators. Cerulean associates slicks with
+   vessels that were nearby in a time window. Neither publishes a per-vessel weighted
+   score with a stated reason per factor. Ours is eight weighted factors summing to
+   1.00, with the plain-language reasons generated from the same numbers the score is
+   built from — so the explanation cannot drift from the score. In a domain where the
+   output ends up in court, "here is the number and here is why" is the useful shape.
+
+2. **A calibrated refusal.** The system declines to attribute when the detection does
+   not clear a measured bar, and we can state what that costs: blocks 60/60 tiles the
+   dataset labels as containing no oil, at the price of 20% of genuine slicks. Cerulean
+   uses human verification for this; we encoded it as a threshold with published
+   performance.
+
+3. **Pricing the imaging delay.** The origin uncertainty our hindcast reports grows
+   with the age of the image — 3 km² at a 3-hour lag, 56 km² at 48 hours. That turns
+   "should we task a satellite?" into a number. Theme 3 has the table.
+
+4. **The gap in the Indian context, which is the actual pitch for PS 26143.**
+   CleanSeaNet is EU-only. India already has the two ends — ISRO/NRSC do SAR
+   detection, INCOIS runs GNOME for trajectory — but they are separate services and
+   neither closes the loop to *attribution*. Nothing domestic takes an image and
+   returns a ranked, evidenced list of suspect vessels. That is the hole we are in.
+
+### What existing systems do better — concede these early
+
+- **Detection accuracy.** Ours is classical CV at mean IoU 0.43. Cerulean's U-Net and
+  the published deep learning models on these datasets do considerably better. We
+  traded accuracy for a 10-hour build and something we can fully explain — and we
+  measured the trade rather than hiding it.
+- **Real AIS.** Theirs is real, ours is synthetic. The PS permits synthetic explicitly,
+  and no open real AIS covers the Bay of Bengal.
+- **Scale and acquisition.** They process every Sentinel-1 scene, continuously, at
+  global scale. We process one tile on a laptop.
+
+> "We're not claiming to beat CleanSeaNet. We're claiming that the attribution layer
+> it keeps in the heads of trained operators can be made explicit, scored and
+> auditable — and that India doesn't have that layer at all yet."
+
 ## Traps to avoid
 
 1. **Don't say "agents," "AI-powered," or "the model decides."** We built none of
    those. Precision is the whole advantage here.
-2. **Don't claim it scales today.** It doesn't — it's one process with in-memory
+2. **Never imply this field is empty.** CleanSeaNet has been operational since 2007
+   and Cerulean is public and automated. Name them before the judge does — see
+   Theme 4.
+3. **Don't claim it scales today.** It doesn't — it's one process with in-memory
    state. Knowing that is the better answer.
-3. **Don't oversell the upload feature.** An uploaded tile has no geocoding, so we
+4. **Don't oversell the upload feature.** An uploaded tile has no geocoding, so we
    choose where to place it. The upload tests detection; the attribution that follows
    is against whichever event we dropped it into. Say so.
-4. **Don't hide the synthetic AIS.** The problem statement explicitly permits it.
+5. **Don't hide the synthetic AIS.** The problem statement explicitly permits it.
    Volunteering it reads as judgement; being caught reads as the opposite.
-5. **Do show it refusing.** Upload `06_no_oil_lookalikes_only.png` — no oil in it, and
+6. **Do show it refusing.** Upload `06_no_oil_lookalikes_only.png` — no oil in it, and
    the pipeline declines to trace or attribute. A system that knows when to stay quiet
    beats one that always has an answer.
 
