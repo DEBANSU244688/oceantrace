@@ -34,23 +34,59 @@ class DriftResult:
     path_geojson: dict       # centroid's path over time, for animating the drift
 
 
-def _advect(start_lat, start_lon, hours, bearing_deg, speed_kmh, n_particles,
-            diffusion_km_per_hour, step_hours):
-    """Advect n_particles from a single start point for `hours`, along
-    `bearing_deg` at `speed_kmh`, with independent random-walk diffusion per
-    particle. Returns (final_lats, final_lons, path_centroid_per_step)."""
+def _forcing_sampler(scenario_id, reverse):
+    """Return f(step_index) -> (u_kmh, v_kmh), the drift vector to apply.
+
+    With real forcing this walks the hourly Open-Meteo series (current + 3%
+    windage) for that event. Without it, it returns the constant vector from
+    config, so nothing breaks when data/ocean_forcing.json has not been built.
+    `reverse` flips the vector, which is what makes the backward run a genuine
+    inversion of the same data the slick position was derived from.
+    """
+    sign = -1.0 if reverse else 1.0
+    series = None
+    if scenario_id is not None:
+        entry = config.forcing_for(scenario_id)
+        series = entry.get("series") if entry else None
+
+    if series is None:
+        rad = np.radians(config.DRIFT_BEARING_DEG)
+        u = config.DRIFT_SPEED_KMH * np.sin(rad)
+        v = config.DRIFT_SPEED_KMH * np.cos(rad)
+        return lambda _step: (sign * u, sign * v)
+
+    sc = config.scenario(scenario_id)
+    times, us, vs = series["time"], series["u_kmh"], series["v_kmh"]
+
+    def at(step_index, start_ts=sc["detection_ts"], step_hours=config.STEP_HOURS):
+        ts = start_ts + timedelta(hours=sign * step_index * step_hours)
+        key = ts.strftime("%Y-%m-%dT%H:%M")
+        if key <= times[0]:
+            i = 0
+        elif key >= times[-1]:
+            i = len(times) - 1
+        else:
+            i = max(j for j, t in enumerate(times) if t <= key)
+        return sign * us[i], sign * vs[i]
+
+    return at
+
+
+def _advect(start_lat, start_lon, hours, n_particles, diffusion_km_per_hour,
+            step_hours, forcing):
+    """Advect n_particles from a single start point for `hours` under `forcing`,
+    with independent random-walk diffusion per particle. Returns
+    (final_lats, final_lons, path_centroid_per_step)."""
     n_steps = max(1, int(hours / step_hours))
     lats = np.full(n_particles, start_lat, dtype=float)
     lons = np.full(n_particles, start_lon, dtype=float)
     path_centroids = [(start_lat, start_lon)]
 
-    bearing_rad = np.radians(bearing_deg)
-    step_dist_km = speed_kmh * step_hours
-
-    for _ in range(n_steps):
+    for step in range(n_steps):
         # deterministic advection component (same for every particle)
-        dlat = km_to_deg_lat(step_dist_km * np.cos(bearing_rad))
-        dlon_per_particle = np.array([km_to_deg_lon(step_dist_km * np.sin(bearing_rad), lat)
+        u_kmh, v_kmh = forcing(step)
+        dlat = km_to_deg_lat(v_kmh * step_hours)
+        dlon_per_particle = np.array([km_to_deg_lon(u_kmh * step_hours, lat)
                                        for lat in lats])
         lats = lats + dlat
         lons = lons + dlon_per_particle
@@ -99,39 +135,39 @@ def _cloud_to_result(lats, lons, path_centroids) -> DriftResult:
                         path_geojson=path_geojson)
 
 
-def hindcast(centroid_lat, centroid_lon, hours=None) -> DriftResult:
-    """Run the drift backward from the detected centroid to estimate the
-    origin. `hours` defaults to config.HINDCAST_HOURS (the assumed detection
-    lag) — see BL.md's S2 (age estimate) for how a real system would
-    estimate this instead of assuming it."""
+def hindcast(centroid_lat, centroid_lon, hours=None, scenario_id=None) -> DriftResult:
+    """Run the drift backward from the detected centroid to estimate the origin.
+
+    With real forcing this integrates the hourly Open-Meteo series backward from
+    the satellite overpass — the same data, reversed, that carried the slick
+    there in the first place. `hours` defaults to config.HINDCAST_HOURS (the
+    assumed detection lag); see S2 for estimating it from the slick instead.
+    """
     hours = hours or config.HINDCAST_HOURS
-    # backward = reverse the drift vector's direction
     lats, lons, path = _advect(
         centroid_lat, centroid_lon, hours,
-        bearing_deg=(config.DRIFT_BEARING_DEG + 180) % 360,
-        speed_kmh=config.DRIFT_SPEED_KMH,
         n_particles=config.N_PARTICLES,
         diffusion_km_per_hour=config.DIFFUSION_KM_PER_HOUR,
         step_hours=config.STEP_HOURS,
+        forcing=_forcing_sampler(scenario_id, reverse=True),
     )
     return _cloud_to_result(lats, lons, path)
 
 
-def forecast(centroid_lat, centroid_lon, hours=None) -> DriftResult:
+def forecast(centroid_lat, centroid_lon, hours=None, scenario_id=None) -> DriftResult:
     """Run the drift forward from the detected centroid — S1 (SHOULD)."""
     hours = hours or config.FORECAST_HOURS
     lats, lons, path = _advect(
         centroid_lat, centroid_lon, hours,
-        bearing_deg=config.DRIFT_BEARING_DEG,
-        speed_kmh=config.DRIFT_SPEED_KMH,
         n_particles=config.N_PARTICLES,
         diffusion_km_per_hour=config.DIFFUSION_KM_PER_HOUR,
         step_hours=config.STEP_HOURS,
+        forcing=_forcing_sampler(scenario_id, reverse=False),
     )
     return _cloud_to_result(lats, lons, path)
 
 
-def estimate_spill_age(polygon_geojson):
+def estimate_spill_age(polygon_geojson, scenario_id=None):
     """S2 — estimate how long the slick has been drifting, from its own shape.
 
     A spill from an effectively point-like source that has been advected for T
@@ -158,17 +194,21 @@ def estimate_spill_age(polygon_geojson):
     x_km = (lons - float(np.mean(lons))) * 111.320 * np.cos(np.radians(mean_lat))
     y_km = (lats - mean_lat) * 110.574
 
-    # unit vector along the drift bearing (0 = north, 90 = east)
-    rad = np.radians(config.DRIFT_BEARING_DEG)
+    # Measure along the drift axis this event actually experienced, not a global
+    # constant — with real forcing the four events drift on different bearings.
+    entry = config.forcing_for(scenario_id) if scenario_id else None
+    bearing = entry["mean_bearing_deg"] if entry else config.DRIFT_BEARING_DEG
+    drift_speed = entry["mean_drift_kmh"] if entry else config.DRIFT_SPEED_KMH
+    rad = np.radians(bearing)
     along = x_km * np.sin(rad) + y_km * np.cos(rad)
     across = x_km * np.cos(rad) - y_km * np.sin(rad)
 
     length_km = float(along.max() - along.min())
     width_km = float(across.max() - across.min())
-    if config.DRIFT_SPEED_KMH <= 0:
+    if drift_speed <= 0:
         return None
 
-    age_hours = length_km / config.DRIFT_SPEED_KMH
+    age_hours = length_km / drift_speed
     elongation = length_km / max(width_km, 1e-6)
     # elongation 1.0 (round blob) -> ~0.15, elongation 3+ -> ~0.9
     confidence = float(np.clip((elongation - 1.0) / 2.0, 0.0, 1.0) * 0.75 + 0.15)

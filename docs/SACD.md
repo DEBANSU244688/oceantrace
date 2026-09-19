@@ -15,8 +15,9 @@ Sample SAR image (Zenodo)
         │                  → polygon, area, perimeter, centroid, confidence
         ▼
 [3] DRIFT ENGINE ────────  physics-based particle model (pure NumPy).
-        │                  Advect N particles from spill centroid using a
-        │                  static/synthetic current+wind vector field.
+        │                  Advect N particles from spill centroid using REAL
+        │                  hourly ocean current + 3% windage (Open-Meteo),
+        │                  cached per event by fetch_ocean_forcing.py.
         │                  Run backward (origin) and forward (forecast).
         ▼
 [4] AIS FUNNEL ──────────  synthetic AIS roster (generated ahead of time,

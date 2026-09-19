@@ -166,7 +166,18 @@ look; attributing one that never happened costs a ship operator their
 reputation. (The detector already refused outright on 28 of those 60 no-oil
 tiles — no region above the size threshold at all. The gate catches the rest.)
 
-### 7. Upload your own image
+### 7. Real ocean forcing
+
+The drift model is no longer driven by a number we chose. Real hourly current
+and wind, per event, per date, from Open-Meteo. Cached to disk so the demo runs
+with no internet. Fallback to the old static vector if the cache is missing, so
+a fresh clone still works.
+
+Say it like this: *"The physics was always real — particle advection is what a
+production system does. What used to be a guess was the forcing. Now that's
+real too, and it's why these four events drift in four different directions."*
+
+### 8. Upload your own image
 
 Same pipeline; the detector doesn't care where its pixels came from. An upload
 carries no geocoding, so it's anchored at the scenario location exactly the way
@@ -174,12 +185,14 @@ the downloaded Zenodo tiles are — which keeps drift and AIS meaningful instead
 of dead-ending after detection. Non-images are rejected with a 415, images with
 no slick-like region with a 422.
 
-### 8. Frontend — React + Vite + react-leaflet
+### 9. Frontend — React + Vite + react-leaflet
 
 Minimalist dark UI, three-step linear flow. SAR tile as a georeferenced
 `<ImageOverlay>` under the polygon with an opacity slider; animated backward
 drift; particle cloud; tile selector and upload; funnel counter; ranked vessel
-list; why-flagged panel.
+list; why-flagged panel. Light and dark themes, following the OS preference
+with a header toggle that overrides and persists; the light palette clears
+WCAG AA on every token.
 
 ---
 
@@ -219,10 +232,14 @@ reads as the opposite.
    time, wrong place), 19 clean background tracks. A funnel that only ever
    returned one result would prove nothing.
 
-2. **The current/wind field is a static vector, not a live ocean model.** The
-   *method* — particle advection, backward and forward — is exactly what a
-   production system uses. Only the data source is simplified. Copernicus
-   Marine is an auth/setup risk not worth a 10-hour budget.
+2. ~~**The current/wind field is a static vector**~~ — **no longer true, and
+   worth saying so.** The drift engine runs on the real hourly ocean current
+   and 10 m wind over each event's own coordinates and dates (Open-Meteo, free,
+   no key), cached so the demo still works offline. Drift is `current + 3% ×
+   wind`, the conventional windage for oil. The four events drift at 0.64–2.19
+   km/h on bearings from 204° to 324° — you can see the paths curve on the map.
+   The hindcast inverts that same series and recovers the origin to 22–91 m,
+   which is a real inversion rather than undoing a constant.
 
 3. **Tile georeferencing is the demo scenario's, not the tile's.** The Zenodo
    tiles are crops shipped with no geocoding, so there is no true lat/lon to

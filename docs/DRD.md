@@ -14,12 +14,17 @@
 ## 2. Ocean current + wind field (for the drift engine)
 For a 10h build, do **not** integrate a live API (Copernicus Marine, NOAA, etc.) unless
 someone on the team has already used one — auth/setup risk is too high for the time budget.
-- **Recommended**: a static or lightly-randomized synthetic vector field (e.g. a dominant
-  current direction/speed + wind component + small random diffusion per particle). This is
-  scientifically the same *method* the reference architecture describes (particle
-  advection) — it's the *data source* that's simplified, not the physics.
-- If someone wants to stretch: a single static download of a real current snapshot for the
-  demo region is a good SHOULD item, not a MUST.
+- ~~**Recommended**: a static or lightly-randomized synthetic vector field~~ —
+  **superseded, we use real data.** `scripts/fetch_ocean_forcing.py` pulls the real hourly
+  ocean current and 10 m wind over each spill event's own coordinates and dates from
+  Open-Meteo (free, no API key, no registration) and caches them to disk, so the demo still
+  runs offline. Drift is `current + 3% × wind`, the conventional windage for oil.
+- The four events now drift at 0.64–2.19 km/h on bearings from 204° to 324° — genuinely
+  different per event, where the old constant made them identical. The drift paths visibly
+  curve on the map because the forcing varies hour to hour.
+- The static vector in `app/config.py` survives only as a fallback for when
+  `data/ocean_forcing.json` has not been built. The demo must not depend on a file that
+  needs the internet to create.
 
 ## 3. AIS data — synthetic, by design
 The official PS explicitly permits this: *"Real AIS if available may be used else synthetic
