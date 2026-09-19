@@ -5,6 +5,7 @@ import FunnelCounter from "./components/FunnelCounter";
 import VesselList from "./components/VesselList";
 import VesselDetail from "./components/VesselDetail";
 import { api } from "./api";
+import { useTheme } from "./theme";
 
 export default function App() {
   const [backendStatus, setBackendStatus] = useState("checking"); // checking | ok | error
@@ -20,6 +21,7 @@ export default function App() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const fileInput = useRef(null);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   // Phase 1 checkpoint (PP.md): prove the frontend can actually reach the
   // backend before anything else in the flow is attempted.
@@ -119,10 +121,19 @@ export default function App() {
           Ocean<span>Trace</span>
         </div>
         <div className="app-subtitle">Spill detection &amp; AIS vessel attribution</div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16 }}>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+        >
+          {theme === "dark" ? "light" : "dark"}
+        </button>
         <div className={`status ${backendStatus}`}>
           {backendStatus === "checking" && "connecting"}
           {backendStatus === "ok" && "connected"}
           {backendStatus === "error" && "backend unreachable"}
+          </div>
         </div>
       </header>
 
@@ -192,6 +203,7 @@ export default function App() {
             spill={spill}
             drift={drift}
             vesselDetail={vesselDetail}
+            theme={theme}
           />
         </div>
 

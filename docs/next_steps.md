@@ -246,6 +246,11 @@ attribution gate.
 
 ## Already done
 
+**Real data**
+- Ocean forcing: real hourly current + 3% windage per event from Open-Meteo,
+  replacing the invented drift vector. Hindcast recovers origins to 22–91 m.
+- Light/dark theming, OS-following with a persisted override, WCAG AA checked.
+
 **Data and scenario**
 - #1 real Sentinel-1 tiles from Zenodo, with measured detector accuracy
 - #2 scenario moved offshore (it was on land, 2–3 m above sea level)

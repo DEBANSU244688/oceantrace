@@ -5,6 +5,46 @@
    The map is the interface; the panel is a caption for it. */
 
 :root {
+  /* Light is the default set; the dark set below overrides it. Two rules do
+     that: the media query for viewers who have not chosen, guarded so an
+     explicit light choice still wins, and the attribute for one who has. */
+  --bg: #ffffff;
+  --surface: #f4f6f8;
+  --rule: #e2e6eb;
+  --accent: #0a7a61;
+  --risk-high: #c0392b;
+  --risk-med: #8a6300;
+  --risk-low: #6b7482;
+  --text: #14181d;
+  --text-dim: #4d5560;
+  --text-faint: #6f7783;
+  --overlay: rgba(255, 255, 255, 0.86);
+  --land-fill: #e8ecf1;
+  --land-line: #c9d1da;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --gutter: 28px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0d11;
+    --surface: #12151b;
+    --rule: #1e232c;
+    --accent: #4fd6b0;
+    --risk-high: #f07167;
+    --risk-med: #e8b04b;
+    --risk-low: #5d6875;
+    --text: #e9ecf0;
+    --text-dim: #99a2ae;
+    --text-faint: #646d7a;
+    --overlay: rgba(11, 13, 17, 0.84);
+    --land-fill: #171b22;
+    --land-line: #2a313c;
+  }
+}
+
+:root[data-theme="dark"] {
   --bg: #0b0d11;
   --surface: #12151b;
   --rule: #1e232c;
@@ -15,9 +55,9 @@
   --text: #e9ecf0;
   --text-dim: #99a2ae;
   --text-faint: #646d7a;
-  --font-body: 'Inter', -apple-system, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --gutter: 28px;
+  --overlay: rgba(11, 13, 17, 0.84);
+  --land-fill: #171b22;
+  --land-line: #2a313c;
 }
 
 * { box-sizing: border-box; }
@@ -63,7 +103,6 @@ body {
 }
 
 .status {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -151,7 +190,7 @@ body {
   color: var(--text-dim);
 }
 .map-pane .leaflet-control-attribution {
-  background: rgba(11, 13, 17, 0.7);
+  background: var(--overlay);
   color: var(--text-faint);
   font-size: 10px;
 }
@@ -323,7 +362,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 7px 12px;
-  background: rgba(11, 13, 17, 0.82);
+  background: var(--overlay);
   backdrop-filter: blur(3px);
 }
 
@@ -414,7 +453,7 @@ body {
   z-index: 1100;
   font-size: 11px;
   color: var(--risk-med);
-  background: rgba(11, 13, 17, 0.85);
+  background: var(--overlay);
   padding: 4px 10px;
   backdrop-filter: blur(3px);
 }
@@ -426,3 +465,20 @@ body {
   color: var(--text-dim);
 }
 .note-blocked .note-label { color: var(--risk-high); }
+
+/* ---------- theme toggle ---------- */
+
+.theme-toggle {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: color 130ms ease, border-color 130ms ease;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--text-faint); }

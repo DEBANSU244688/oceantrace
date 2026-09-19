@@ -33,8 +33,9 @@ browser Network tab if asked — nothing in the flow is mocked frontend data.
    resolves into 150 advected particles and an uncertainty circle. Say out loud:
    *"the origin is a probability cloud, not a point."* The estimated slick age
    appears alongside the spill window.
-4. **Analyse AIS** — the funnel narrows 26 → 2 → 2 → 2 and the ranked list
-   appears.
+4. **Analyse AIS** — the funnel narrows from 26. How far depends on the event: the
+   Paradip approach tile goes 26 → 1 → 1 → 1, the southern lane 26 → 3 → 3 → 3. Real
+   traffic filtered against that event's real origin and window.
 5. **Click the top vessel** — its track is drawn, and the why-flagged panel
    lists the reasons in plain language.
 6. **Now switch to a different tile and run it again.** Different origin,
@@ -95,7 +96,10 @@ a local equirectangular projection. Handles any tile size.
 ### 3. Drift — `drift_engine.py`
 
 Physics-based **particle advection**, pure NumPy. 150 particles stepped every
-30 min under a combined current+wind vector plus per-particle random diffusion.
+30 min under **real hourly ocean current + 3% windage** (Open-Meteo, per event, per
+date — cached so the demo runs offline), plus per-particle random diffusion. The four
+events drift at 0.64–2.19 km/h on bearings from 204° to 324°; the paths visibly curve on
+the map because the forcing varies hour to hour.
 
 - **Backward** → origin probability cloud. Cloud centroid = probable origin,
   90th-percentile spread = uncertainty radius. Both the cloud and the backward
@@ -108,7 +112,7 @@ Physics-based **particle advection**, pure NumPy. 150 particles stepped every
   drift, a round blob carries almost no temporal information and we say so
   rather than quoting a firm number. **This is independent of the assumed
   satellite-pass lag**, which is the point: on the synthetic tile it returns
-  3.1 h against an assumed 4.0 h, two separate routes to roughly the same
+  3.7 h against an assumed 4.0 h, two separate routes to roughly the same
   answer.
 
 ### 4. AIS funnel + attribution — `attribution.py`
@@ -135,8 +139,8 @@ explainable?"
 
 ### 5. API — `main.py` (FastAPI)
 
-Eight endpoints, contract frozen in `SACD.md` §3, auto-documented at `/docs`:
-`/health`, `/api/scenario`, `/api/images/{id}`, `/api/detect`,
+Nine endpoints, contract frozen in `SACD.md` §3, auto-documented at `/docs`:
+`/health`, `/api/scenario`, `/api/images/{id}`, `/api/basemap/land`, `/api/detect`,
 `/api/detect/upload`, `/api/drift`, `/api/attribution`, `/api/vessels/{id}`.
 In-memory state — no database server, per `DB.md`.
 
@@ -166,7 +170,18 @@ look; attributing one that never happened costs a ship operator their
 reputation. (The detector already refused outright on 28 of those 60 no-oil
 tiles — no region above the size threshold at all. The gate catches the rest.)
 
-### 7. Upload your own image
+### 7. Real ocean forcing
+
+The drift model is no longer driven by a number we chose. Real hourly current
+and wind, per event, per date, from Open-Meteo. Cached to disk so the demo runs
+with no internet. Fallback to the old static vector if the cache is missing, so
+a fresh clone still works.
+
+Say it like this: *"The physics was always real — particle advection is what a
+production system does. What used to be a guess was the forcing. Now that's
+real too, and it's why these four events drift in four different directions."*
+
+### 8. Upload your own image
 
 Same pipeline; the detector doesn't care where its pixels came from. An upload
 carries no geocoding, so it's anchored at the scenario location exactly the way
@@ -174,12 +189,14 @@ the downloaded Zenodo tiles are — which keeps drift and AIS meaningful instead
 of dead-ending after detection. Non-images are rejected with a 415, images with
 no slick-like region with a 422.
 
-### 8. Frontend — React + Vite + react-leaflet
+### 9. Frontend — React + Vite + react-leaflet
 
 Minimalist dark UI, three-step linear flow. SAR tile as a georeferenced
 `<ImageOverlay>` under the polygon with an opacity slider; animated backward
 drift; particle cloud; tile selector and upload; funnel counter; ranked vessel
-list; why-flagged panel.
+list; why-flagged panel. Light and dark themes, following the OS preference
+with a header toggle that overrides and persists; the light palette clears
+WCAG AA on every token.
 
 ---
 
@@ -188,7 +205,7 @@ list; why-flagged panel.
 | Claim | Number |
 |---|---|
 | Detector accuracy vs the dataset's own ground-truth masks | **mean IoU 0.43, median 0.41, 27/70 tiles above 0.5** |
-| Origin recovery vs scenario ground truth | within **~50 m** (tested: 0.03–0.11 km) |
+| Origin recovery vs scenario ground truth | **22–91 m**, inverting real ocean forcing |
 | Spill window recovery | **exact** |
 | Guilty vessel score vs next-highest | **0.94 vs 0.50** |
 | Full flow, detect → vessel detail | **~0.5 s** (`PRD.md` allows 60 s) |
@@ -219,10 +236,14 @@ reads as the opposite.
    time, wrong place), 19 clean background tracks. A funnel that only ever
    returned one result would prove nothing.
 
-2. **The current/wind field is a static vector, not a live ocean model.** The
-   *method* — particle advection, backward and forward — is exactly what a
-   production system uses. Only the data source is simplified. Copernicus
-   Marine is an auth/setup risk not worth a 10-hour budget.
+2. ~~**The current/wind field is a static vector**~~ — **no longer true, and
+   worth saying so.** The drift engine runs on the real hourly ocean current
+   and 10 m wind over each event's own coordinates and dates (Open-Meteo, free,
+   no key), cached so the demo still works offline. Drift is `current + 3% ×
+   wind`, the conventional windage for oil. The four events drift at 0.64–2.19
+   km/h on bearings from 204° to 324° — you can see the paths curve on the map.
+   The hindcast inverts that same series and recovers the origin to 22–91 m,
+   which is a real inversion rather than undoing a constant.
 
 3. **Tile georeferencing is the demo scenario's, not the tile's.** The Zenodo
    tiles are crops shipped with no geocoding, so there is no true lat/lon to
@@ -328,9 +349,17 @@ always produces an answer.
 **"Your slick age says 1 hour but the window is 4 hours — which is it?"**
 Two different measurements, deliberately. The window comes from the assumed
 satellite-pass lag; the age comes from the slick's own geometry. On the
-synthetic tile they agree closely (3.1 h vs 4.0 h). On a small real crop the
+synthetic tile they agree closely (3.7 h vs 4.0 h). On a small real crop the
 geometry estimate is low *and reports low confidence*, which is the system
 being honest rather than confident and wrong.
+
+**"Isn't EMSA / SkyTruth already doing this?"**
+Yes — name them yourself before the judge does. CleanSeaNet (operational since
+2007, AIS correlation, backward drift), Cerulean (automated, deep learning,
+public), GNOME (which INCOIS already runs for the Indian Coast Guard). What is
+ours is the auditable scored attribution layer, the calibrated refusal, and the
+fact that India has the detection end and the trajectory end but nothing that
+closes the loop between them. Full briefing in `JUDGE_QA_PREP.md` Theme 4.
 
 **"Why not deep learning?"**
 Time budget — and we can tell you what classical CV actually scores. A trained

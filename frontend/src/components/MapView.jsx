@@ -15,7 +15,8 @@ if (!CARTO_BASEMAPS_API_KEY) {
 const TILE_QUERY = CARTO_BASEMAPS_API_KEY
   ? `?${new URLSearchParams({ key: CARTO_BASEMAPS_API_KEY }).toString()}`
   : "";
-const TILE_URL = `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png${TILE_QUERY}`;
+const tileUrl = (theme) =>
+  `https://{s}.basemaps.cartocdn.com/rastertiles/${theme === "light" ? "light_all" : "dark_all"}/{z}/{x}/{y}{r}.png${TILE_QUERY}`;
 // Credits both sources, because both can be what's on screen: CARTO/OSM raster
 // when there's internet, Natural Earth land polygons when there isn't. Natural
 // Earth is public domain and doesn't require attribution — crediting it anyway
@@ -38,6 +39,21 @@ const LAND_PANE = "land-pane";
 const LAND_PANE_Z = 150;
 
 const HINDCAST_STEP_MS = 150;
+
+// Leaflet takes colours as strings, so these cannot be CSS variables. Same
+// roles as the stylesheet's tokens, darkened for light mode so every line still
+// carries against white — a teal that reads well on near-black washes out on
+// paper. Amber becomes a dark ochre for the same reason.
+const PALETTE = {
+  dark: {
+    spill: "#4fd6b0", origin: "#e8b04b", vessel: "#f07167", forecast: "#99a2ae",
+    land: "#171b22", landLine: "#2a313c",
+  },
+  light: {
+    spill: "#0a7a61", origin: "#8a6300", vessel: "#c0392b", forecast: "#8c95a1",
+    land: "#e8ecf1", landLine: "#c9d1da",
+  },
+};
 
 function toLatLngs(feature) {
   const coords = feature?.geometry?.coordinates ?? [];
@@ -65,7 +81,8 @@ function FitToData({ bounds, fallbackCenter }) {
 
 const TILE_FAILURES_BEFORE_OFFLINE = 4;
 
-export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
+export default function MapView({ regionCenter, spill, drift, vesselDetail, theme = "dark" }) {
+  const c = PALETTE[theme] ?? PALETTE.dark;
   const [sarOpacity, setSarOpacity] = useState(0.85);
   const [basemapOffline, setBasemapOffline] = useState(false);
   const [land, setLand] = useState(null);
@@ -144,7 +161,8 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
             come from CARTO. When they fail we say so, and the public-domain
             land layer below keeps the map readable regardless. */}
         <TileLayer
-          url={TILE_URL}
+          key={theme}
+          url={tileUrl(theme)}
           attribution={TILE_ATTRIBUTION}
           eventHandlers={{
             tileerror: () => {
@@ -163,9 +181,9 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
         <Pane name={LAND_PANE} style={{ zIndex: LAND_PANE_Z }}>
           {land && (
             <GeoJSON
-              key="land"
+              key={`land-${theme}`}
               data={land}
-              style={{ color: "#2a313c", weight: 1, fillColor: "#171b22", fillOpacity: 1 }}
+              style={{ color: c.landLine, weight: 1, fillColor: c.land, fillOpacity: 1 }}
             />
           )}
         </Pane>
@@ -188,7 +206,7 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
           <GeoJSON
             key={`spill-${spill.spill_id}`}
             data={spill.polygon_geojson}
-            style={{ color: "#4fd6b0", weight: 2, fillColor: "#4fd6b0", fillOpacity: 0.25 }}
+            style={{ color: c.spill, weight: 2, fillColor: c.spill, fillOpacity: 0.25 }}
           />
         )}
 
@@ -198,7 +216,7 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
             {hindcastStep > 1 && (
               <Polyline
                 positions={hindcastPath.slice(0, hindcastStep)}
-                pathOptions={{ color: "#e8b04b", weight: 2, dashArray: "3 4" }}
+                pathOptions={{ color: c.origin, weight: 2, dashArray: "3 4" }}
               />
             )}
 
@@ -211,8 +229,8 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
                   center={p}
                   radius={1.6}
                   pathOptions={{
-                    color: "#e8b04b", weight: 0,
-                    fillColor: "#e8b04b", fillOpacity: 0.55,
+                    color: c.origin, weight: 0,
+                    fillColor: c.origin, fillOpacity: 0.55,
                   }}
                 />
               ))}
@@ -223,14 +241,14 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
                   center={drift.origin_zone.center}
                   radius={drift.origin_zone.radius_km * 1000}
                   pathOptions={{
-                    color: "#e8b04b", weight: 1.5,
-                    fillColor: "#e8b04b", fillOpacity: 0.08,
+                    color: c.origin, weight: 1.5,
+                    fillColor: c.origin, fillOpacity: 0.08,
                   }}
                 />
                 <CircleMarker
                   center={drift.origin_zone.center}
                   radius={5}
-                  pathOptions={{ color: "#e8b04b", fillColor: "#e8b04b", fillOpacity: 1 }}
+                  pathOptions={{ color: c.origin, fillColor: c.origin, fillOpacity: 1 }}
                 />
               </>
             )}
@@ -239,7 +257,7 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
               <GeoJSON
                 key="forecast-path"
                 data={drift.forecast_path_geojson}
-                style={{ color: "#99a2ae", weight: 2, dashArray: "4 5" }}
+                style={{ color: c.forecast, weight: 2, dashArray: "4 5" }}
               />
             )}
           </>
@@ -249,7 +267,7 @@ export default function MapView({ regionCenter, spill, drift, vesselDetail }) {
           <GeoJSON
             key={`vessel-${vesselDetail.vessel_id}`}
             data={vesselDetail.trajectory_geojson}
-            style={{ color: "#f07167", weight: 2 }}
+            style={{ color: c.vessel, weight: 2 }}
           />
         )}
       </MapContainer>

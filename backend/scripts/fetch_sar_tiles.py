@@ -28,6 +28,7 @@ Then add the ids it prints to SAMPLE_IMAGES in app/config.py.
 Usage:
     python scripts/fetch_sar_tiles.py
 """
+import http.client
 import io
 import json
 import struct
@@ -73,7 +74,11 @@ def _get(byte_range, attempts=4):
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 return r.read()
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
+        except (urllib.error.URLError, TimeoutError, OSError,
+                http.client.HTTPException) as e:
+            # http.client.IncompleteRead is an HTTPException, not an OSError —
+            # Zenodo's CDN truncates a response often enough that leaving it out
+            # means the script dies partway through for no good reason.
             if attempt == attempts:
                 raise
             print(f"    retry {attempt}/{attempts - 1} after {type(e).__name__}: {e}")

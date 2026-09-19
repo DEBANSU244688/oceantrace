@@ -7,9 +7,37 @@ sync, because they all import from here rather than hardcoding values.
 Kept in sync with scripts/generate_ais.py's ORIGIN_LAT/LON and spill window
 — if you change one, change the other (see the comment there).
 """
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from app import geo_utils
+
+# ---------------------------------------------------------------------------
+# Real ocean forcing, fetched by scripts/fetch_ocean_forcing.py.
+#
+# When present this is what drives the drift engine: hourly ocean current plus
+# 3% windage, from Open-Meteo, over each event's own coordinates and dates. It
+# also carries the detected position each origin drifts to, which the sample
+# tiles are anchored on — so the hindcast inverts real data rather than undoing
+# a constant.
+#
+# When absent everything still runs on the static vector below, which is what
+# DRD.md §2 originally specified. That fallback is deliberate: the demo must not
+# depend on a file that needs the internet to build.
+# ---------------------------------------------------------------------------
+_FORCING_PATH = Path(__file__).resolve().parent.parent / "data" / "ocean_forcing.json"
+try:
+    OCEAN_FORCING = json.loads(_FORCING_PATH.read_text())
+except (OSError, ValueError):
+    OCEAN_FORCING = None
+
+
+def forcing_for(scenario_id):
+    """Real hourly drift series for an event, or None to use the static vector."""
+    if not OCEAN_FORCING:
+        return None
+    return OCEAN_FORCING.get("scenarios", {}).get(scenario_id)
 
 # ---------------------------------------------------------------------------
 # Scenario ground truth (only "known" during generation — the pipeline is
@@ -23,8 +51,10 @@ from app import geo_utils
 # SEAWARD_BEARING_DEG in generate_ais.py encodes.
 REGION_CENTER = (20.05, 86.95)                 # Bay of Bengal, off Paradip
 
-# The ocean is the same everywhere in the region, so the drift vector is global.
-# A static vector is a deliberate simplification — see SACD.md §4 / DRD.md §2.
+# Fallback drift vector, used only when data/ocean_forcing.json is missing.
+# The real forcing is per-event and time-varying; these constants are what
+# DRD.md §2 originally specified, kept so the pipeline still runs offline
+# before anyone has fetched the real data.
 DRIFT_BEARING_DEG = 100          # compass bearing the slick drifts along
 DRIFT_SPEED_KMH = 2.5            # ~1.35 knots, a plausible current+wind drift
 SPILL_WINDOW_HOURS = 4           # +/- 2h around the implied spill time
@@ -57,8 +87,14 @@ def _scenario(sid, label, origin, spill_time, guilty):
     what the sample tile gets anchored on, and what detector.py is expected to
     rediscover from pixels."""
     lat, lon = origin
-    det_lat, det_lon = geo_utils.project(
-        lat, lon, DRIFT_BEARING_DEG, DRIFT_SPEED_KMH * HINDCAST_HOURS)
+    # Prefer where the real forcing actually carried the slick; fall back to the
+    # static vector when the forcing file has not been built.
+    real = forcing_for(sid)
+    if real:
+        det_lat, det_lon = real["detected_lat"], real["detected_lon"]
+    else:
+        det_lat, det_lon = geo_utils.project(
+            lat, lon, DRIFT_BEARING_DEG, DRIFT_SPEED_KMH * HINDCAST_HOURS)
     return {
         "id": sid,
         "label": label,

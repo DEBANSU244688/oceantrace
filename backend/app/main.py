@@ -250,8 +250,8 @@ def drift(req: DriftRequest):
 
     lat, lon = spill["centroid"]
     sc = config.scenario(spill.get("scenario_id"))
-    hc = drift_engine.hindcast(lat, lon)
-    fc = drift_engine.forecast(lat, lon)
+    hc = drift_engine.hindcast(lat, lon, scenario_id=sc["id"])
+    fc = drift_engine.forecast(lat, lon, scenario_id=sc["id"])
     window_start, window_end = drift_engine.estimate_spill_window(sc["detection_ts"])
 
     result = {
@@ -263,7 +263,8 @@ def drift(req: DriftRequest):
         "spill_window": {"start": window_start.isoformat(), "end": window_end.isoformat()},
         "forecast_path_geojson": fc.path_geojson,
         "hindcast_path_geojson": hc.path_geojson,
-        "age_estimate": drift_engine.estimate_spill_age(spill["polygon_geojson"]),
+        "age_estimate": drift_engine.estimate_spill_age(
+            spill["polygon_geojson"], scenario_id=sc["id"]),
     }
     store.save_drift(req.spill_id, result)
     return result

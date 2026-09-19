@@ -14,6 +14,12 @@ plain-language "why flagged" reasons.
 
 ## Run it (two terminals)
 
+> **Pulling this branch onto an existing setup?** Re-run `pip install -r
+> requirements.txt`. `python-multipart` was added for the upload endpoint, and
+> without it the app fails at import with a stack trace rather than a hint. Make
+> sure you use the same interpreter you run `uvicorn` with — if you have more
+> than one Python installed, `python -m uvicorn ...` is safer than `uvicorn ...`.
+
 **Terminal 1 - backend**
 ```bash
 cd backend
@@ -76,6 +82,39 @@ nominal spacing, set in `TILE_METRES_PER_PX`). The *pixels* are real
 Sentinel-1 backscatter; the *position* is the demo scenario's. That is what
 lets real imagery compose with the synthetic AIS roster, which `DRD.md` §3
 notes the PS explicitly permits.
+
+### The drift engine runs on real ocean data
+
+Not a made-up vector. `scripts/fetch_ocean_forcing.py` pulls the real hourly
+ocean current and 10 m wind over each spill event's own coordinates and dates
+from Open-Meteo — free, no API key, no registration — and caches them, so the
+demo itself still runs offline.
+
+Drift is `current + 3% × wind`, the conventional windage for oil on water. The
+four events come out genuinely different: **0.64 to 2.19 km/h on bearings from
+204° to 324°**, where the old constant made every event drift identically. You
+can see it on the map — the drift paths curve, because the forcing varies hour
+to hour.
+
+The hindcast integrates that same series backward, so recovering the origin is
+a real inversion of real data rather than undoing a constant. It lands within
+**22–91 m** of ground truth across the four events.
+
+```bash
+cd backend
+python scripts/fetch_ocean_forcing.py   # then re-run fetch_sar_tiles.py
+```
+
+If `data/ocean_forcing.json` is missing the pipeline falls back to the static
+vector in `app/config.py` and still works — the demo must not depend on a file
+that needs the internet to build.
+
+### It has a light mode
+
+Follows your OS preference, with a toggle in the header that overrides it and
+is remembered. The map basemap, the land layer and every data layer colour
+switch with it; the light palette was checked against WCAG AA and every token
+clears 4.5:1 on white.
 
 ### It runs with no internet
 
